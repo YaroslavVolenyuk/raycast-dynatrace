@@ -1,0 +1,31 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+
+# Raycast specific files
+raycast-env.d.ts
+.raycast-swift-build
+.swiftpm
+compiled_raycast_swift
+compiled_raycast_rust
+
+# build output
+/dist
+/coverage
+
+# misc
+.DS_Store
+
+# IDE
+.idea
+.vscode
+
+# Development mode icons (root level only — anchor prevents matching assets/)
+/dynatrace-icon*.png
+
+# Environment variables (contains secrets — never commit)
+.env
+.env.local
+.env.*.local
+.integrationtests.env

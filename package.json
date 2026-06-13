@@ -1,0 +1,41 @@
+{
+  "$schema": "https://www.raycast.com/schemas/extension.json",
+  "name": "raycast-dynatrace",
+  "title": "Dynatrace",
+  "description": "Monitor your Dynatrace environment directly from Raycast — logs, problems, DQL, deployments and entities.",
+  "icon": "dynatrace-icon.png",
+  "author": "yaroslav_volenyuk",
+  "platforms": ["macOS"],
+  "categories": ["Developer Tools", "Productivity"],
+  "keywords": ["dynatrace", "observability", "logs", "monitoring", "apm", "dql", "grail"],
+  "license": "Apache-2.0",
+  "commands": [],
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@raycast/api": "^1.85.2",
+    "@raycast/utils": "^1.17.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@raycast/eslint-config": "^2.0.4",
+    "@types/jest": "^30.0.0",
+    "@types/node": "22.13.10",
+    "@types/react": "^18.3.31",
+    "eslint": "^9.22.0",
+    "jest": "30.4.1",
+    "prettier": "^3.5.3",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.2"
+  },
+  "scripts": {
+    "build": "ray build",
+    "dev": "ray develop",
+    "lint": "eslint src",
+    "fix-lint": "eslint src --fix",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --passWithNoTests"
+  }
+}
