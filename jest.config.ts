@@ -4,6 +4,10 @@ const config: Config = {
   preset: "ts-jest",
   testEnvironment: "node",
   testMatch: ["**/__tests__/**/*.test.ts"],
+  moduleNameMapper: {
+    // Mock @raycast/api for unit tests (SDK code never imports it; services/ui do).
+    "^@raycast/api$": "<rootDir>/src/__mocks__/@raycast/api.ts",
+  },
   transform: {
     "^.+\\.tsx?$": ["ts-jest", { tsconfig: "tsconfig.json" }],
   },
