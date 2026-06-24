@@ -1,2 +1,4 @@
-/** SDK · grail — DQL execution, query builders, escapeDqlString. (Phase 1) */
-export {};
+/** SDK · grail — DQL execution, response schema, escapeDqlString. */
+export { escapeDqlString } from "./escape";
+export { grailResponseSchema, type GrailResponse } from "./schema";
+export { executeDqlQuery, executeDqlQueryValidated } from "./query";
