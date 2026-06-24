@@ -22,6 +22,17 @@
     "grail"
   ],
   "license": "MIT",
+  "preferences": [
+    {
+      "name": "useMockData",
+      "title": "Use Mock Data",
+      "description": "Use fixture-backed mock data instead of the real Dynatrace API (for development)",
+      "type": "checkbox",
+      "required": false,
+      "default": false,
+      "label": "Enable mock mode"
+    }
+  ],
   "commands": [],
   "engines": {
     "node": ">=22"

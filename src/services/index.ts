@@ -6,3 +6,4 @@
  */
 export { StorageKeys } from "./storageKeys";
 export { listTenants, saveTenant, deleteTenant, getActiveTenant, setActiveTenant } from "./tenants";
+export { resolveTransport } from "./transport";
