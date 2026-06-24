@@ -5,11 +5,33 @@
  * and ZERO React imports (enforced by eslint + CI grep) so it could be
  * published later as `@dynatrace-oss/dynatrace-ts-client`.
  *
- * Sub-modules (filled in during Phase 1):
+ * Sub-modules:
  *   - auth/      OAuth client-credentials, token cache, TenantConfig
- *   - http/      single transport: timeout, 401-retry, rate-limit, pagination,
- *                classic-proxy resolution, structured DynatraceError
- *   - grail/     DQL execution, query builders, escapeDqlString
- *   - resources/ one module per resource (endpoints + zod schemas + normalizers)
+ *   - http/      single REST transport: timeout, 401-retry, rate-limit,
+ *                pagination, classic-proxy resolution, structured errors
+ *   - grail/     DQL execution + escapeDqlString
+ *   - resources/ one module per resource (Phase 2)
  */
-export {};
+export {
+  type TenantConfig,
+  OAuthError,
+  getAccessToken,
+  invalidateTokenCache,
+  validateTenantCredentials,
+} from "./auth";
+export {
+  dynatraceRest,
+  dynatraceRestPaginated,
+  type RestClientOptions,
+  type RestResponse,
+  RestError,
+  ValidationError,
+  DavisCopilotUnavailableError,
+} from "./http";
+export {
+  escapeDqlString,
+  grailResponseSchema,
+  type GrailResponse,
+  executeDqlQuery,
+  executeDqlQueryValidated,
+} from "./grail";

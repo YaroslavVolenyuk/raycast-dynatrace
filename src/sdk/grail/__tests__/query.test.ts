@@ -4,7 +4,6 @@
 // responses. OAuthError is kept real (via requireActual) because query.ts checks
 // `instanceof OAuthError`.
 
-import { describe, it, expect, beforeEach, jest } from "@jest/globals";
 import { z } from "zod";
 import type { TenantConfig } from "../../auth";
 
