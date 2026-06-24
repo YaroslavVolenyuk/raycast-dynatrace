@@ -29,3 +29,4 @@ compiled_raycast_rust
 .env.local
 .env.*.local
 .integrationtests.env
+.claude

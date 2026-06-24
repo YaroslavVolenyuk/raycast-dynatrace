@@ -35,6 +35,14 @@
   ],
   "commands": [
     {
+      "name": "dt-manage-tenants",
+      "title": "Manage Tenants",
+      "subtitle": "Dynatrace",
+      "description": "Add, edit, test, and switch between Dynatrace tenants",
+      "mode": "view",
+      "icon": "dynatrace-icon.png"
+    },
+    {
       "name": "dt-search-logs",
       "title": "Search Logs",
       "subtitle": "Dynatrace",
