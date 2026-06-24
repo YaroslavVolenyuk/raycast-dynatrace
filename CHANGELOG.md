@@ -12,5 +12,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lint-enforced architecture boundaries.
 - Project tooling: TypeScript, ESLint (with `no-restricted-imports` layer
   rules), Prettier, Jest.
-- Apache-2.0 license and NOTICE.
+- MIT license.
 - CI: ESLint, typecheck, Jest, and gitleaks secret scanning.

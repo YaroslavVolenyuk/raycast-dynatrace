@@ -47,7 +47,7 @@ commands are added to the manifest.
 
 ## License
 
-Apache-2.0 — see [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+MIT — see [LICENSE](./LICENSE).
 
 This is an independent, community-built extension and is not an official
 Dynatrace product.

@@ -5,10 +5,23 @@
   "description": "Monitor your Dynatrace environment directly from Raycast — logs, problems, DQL, deployments and entities.",
   "icon": "dynatrace-icon.png",
   "author": "yaroslav_volenyuk",
-  "platforms": ["macOS"],
-  "categories": ["Developer Tools", "Productivity"],
-  "keywords": ["dynatrace", "observability", "logs", "monitoring", "apm", "dql", "grail"],
-  "license": "Apache-2.0",
+  "platforms": [
+    "macOS"
+  ],
+  "categories": [
+    "Developer Tools",
+    "Productivity"
+  ],
+  "keywords": [
+    "dynatrace",
+    "observability",
+    "logs",
+    "monitoring",
+    "apm",
+    "dql",
+    "grail"
+  ],
+  "license": "MIT",
   "commands": [],
   "engines": {
     "node": ">=22"
