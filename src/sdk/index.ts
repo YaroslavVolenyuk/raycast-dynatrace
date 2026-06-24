@@ -34,4 +34,6 @@ export {
   type GrailResponse,
   executeDqlQuery,
   executeDqlQueryValidated,
+  type GrailQueryOptions,
 } from "./grail";
+export { type DynatraceTransport, liveTransport } from "./transport";

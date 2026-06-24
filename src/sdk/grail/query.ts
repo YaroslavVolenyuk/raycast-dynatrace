@@ -6,7 +6,7 @@ import { ZodError, z } from "zod";
 import { getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
 import { grailResponseSchema } from "./schema";
 
-interface GrailQueryOptions {
+export interface GrailQueryOptions {
   timeframe?: { start: string; end: string };
   /** AbortSignal from the caller (e.g. unmount abort from a UI hook). */
   signal?: AbortSignal;
