@@ -11,8 +11,7 @@
  */
 
 import type { TenantConfig } from "../sdk/auth";
-import type { GrailQueryOptions, DynatraceTransport } from "../sdk";
-import type { RestClientOptions, RestResponse } from "../sdk";
+import type { DynatraceTransport, RestResponse } from "../sdk";
 
 type DqlMatcher = (query: string) => boolean;
 type RestMatcher = (path: string) => boolean;
@@ -44,11 +43,7 @@ export class MockTransport implements DynatraceTransport {
     return this;
   }
 
-  async executeDql<T = Record<string, unknown>>(
-    _tenant: TenantConfig,
-    query: string,
-    _options?: GrailQueryOptions,
-  ): Promise<T[]> {
+  async executeDql<T = Record<string, unknown>>(_tenant: TenantConfig, query: string): Promise<T[]> {
     const fixture = this.dqlFixtures.find((f) => f.match(query));
     if (!fixture) {
       throw new Error(`MockTransport: no DQL fixture registered for query:\n${query.slice(0, 120)}`);
@@ -56,11 +51,7 @@ export class MockTransport implements DynatraceTransport {
     return fixture.records as T[];
   }
 
-  async rest<T = unknown>(
-    _tenant: TenantConfig,
-    path: string,
-    _options?: RestClientOptions<T>,
-  ): Promise<RestResponse<T>> {
+  async rest<T = unknown>(_tenant: TenantConfig, path: string): Promise<RestResponse<T>> {
     const fixture = this.restFixtures.find((f) => f.match(path));
     if (!fixture) {
       throw new Error(`MockTransport: no REST fixture registered for path: ${path}`);

@@ -37,3 +37,4 @@ export {
   type GrailQueryOptions,
 } from "./grail";
 export { type DynatraceTransport, liveTransport } from "./transport";
+export * from "./resources";

@@ -1,0 +1,37 @@
+[
+  {
+    "timestamp": "2026-06-24T10:58:00.000Z",
+    "loglevel": "ERROR",
+    "content": "NullPointerException in PaymentService.processTransaction() at line 142",
+    "log.source": "/var/log/payment-service/app.log",
+    "service.name": "payment-service",
+    "dt.entity.host": "HOST-abc123",
+    "status": "ERROR"
+  },
+  {
+    "timestamp": "2026-06-24T10:55:00.000Z",
+    "loglevel": "ERROR",
+    "content": "Failed to connect to database: Connection refused (host=db-primary:5432, retries=3)",
+    "log.source": "/var/log/order-service/app.log",
+    "service.name": "order-service",
+    "dt.entity.host": "HOST-def456",
+    "status": "ERROR"
+  },
+  {
+    "timestamp": "2026-06-24T10:48:00.000Z",
+    "loglevel": "WARN",
+    "content": "Response time exceeded threshold: 3200ms (threshold=2000ms) for GET /api/v2/products",
+    "log.source": "/var/log/api-gateway/access.log",
+    "service.name": "api-gateway",
+    "host.name": "gateway-node-01",
+    "status": "SLOW"
+  },
+  {
+    "timestamp": "2026-06-24T10:40:00.000Z",
+    "loglevel": "INFO",
+    "content": "Deployment completed successfully: order-service v2.4.1 to v2.4.2 (canary: 10%)",
+    "log.source": "/var/log/deploy-agent/events.log",
+    "service.name": "deploy-agent",
+    "status": "OK"
+  }
+]
