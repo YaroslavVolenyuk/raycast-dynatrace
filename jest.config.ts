@@ -1,9 +1,12 @@
 import type { Config } from "jest";
 
 const config: Config = {
-  preset: "ts-jest",
+  // Compile TS via the explicit transform below rather than `preset: "ts-jest"`
+  // (the preset is redundant once transform is set, and avoids preset-resolution
+  // flakiness in some environments).
   testEnvironment: "node",
   testMatch: ["**/__tests__/**/*.test.ts"],
+  moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
   moduleNameMapper: {
     // Mock @raycast/api for unit tests (SDK code never imports it; services/ui do).
     "^@raycast/api$": "<rootDir>/src/__mocks__/@raycast/api.ts",

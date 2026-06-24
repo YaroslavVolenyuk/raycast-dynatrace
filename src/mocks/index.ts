@@ -1,2 +1,2 @@
-/** mocks — fixtures-derived mock data + mock transport for the SDK. (Phase 1) */
-export {};
+/** mocks — MockTransport + fixture-backed mock data for the SDK. */
+export { MockTransport } from "./transport";
