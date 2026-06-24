@@ -33,7 +33,49 @@
       "label": "Enable mock mode"
     }
   ],
-  "commands": [],
+  "commands": [
+    {
+      "name": "dt-search-logs",
+      "title": "Search Logs",
+      "subtitle": "Dynatrace",
+      "description": "Search Dynatrace Grail logs with DQL filters",
+      "mode": "view",
+      "icon": "dynatrace-icon.png",
+      "arguments": [
+        {
+          "name": "timeframeValue",
+          "type": "text",
+          "placeholder": "24",
+          "required": false
+        },
+        {
+          "name": "timeframeUnit",
+          "type": "dropdown",
+          "placeholder": "Hours",
+          "data": [
+            { "title": "Minutes", "value": "m" },
+            { "title": "Hours", "value": "h" },
+            { "title": "Days", "value": "d" }
+          ],
+          "required": false
+        },
+        {
+          "name": "query",
+          "type": "dropdown",
+          "placeholder": "All Logs",
+          "data": [
+            { "title": "All Logs", "value": "all" },
+            { "title": "Error", "value": "error" },
+            { "title": "Fatal", "value": "fatal" },
+            { "title": "Warning", "value": "warning" },
+            { "title": "Info", "value": "info" },
+            { "title": "Debug", "value": "debug" }
+          ],
+          "required": false
+        }
+      ]
+    }
+  ],
   "engines": {
     "node": ">=22"
   },
