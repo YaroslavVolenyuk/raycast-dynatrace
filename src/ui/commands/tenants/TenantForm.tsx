@@ -10,7 +10,7 @@ import { validateTenantCredentials } from "../../../sdk/auth";
 import { saveTenant, setActiveTenant, listTenants } from "../../../services";
 import {
   DEFAULT_SSO_ENDPOINT,
-  DEFAULT_READONLY_SCOPES,
+  READ_ONLY_SCOPES,
   buildTenantConfig,
   validateForm,
   type TenantFormValues,
@@ -122,12 +122,12 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
         info="Stored in Raycast LocalStorage (unencrypted on disk). Tokens stay in memory only."
       />
       <Form.Separator />
-      <Form.TextField
+      <Form.TextArea
         id="scopes"
         title="Scopes"
-        placeholder="storage:logs:read storage:problems:read"
-        defaultValue={(tenant?.scopes ?? DEFAULT_READONLY_SCOPES).join(" ")}
-        info="Space- or comma-separated OAuth scopes. Defaults to read-only Grail scopes."
+        placeholder={"storage:logs:read\nstorage:problems:read"}
+        defaultValue={(tenant?.scopes ?? READ_ONLY_SCOPES).join("\n")}
+        info="One OAuth scope per line. Defaults to read-only Grail scopes; add write scopes only if you need Operate-mode commands."
       />
       <Form.TextField
         id="ssoEndpoint"

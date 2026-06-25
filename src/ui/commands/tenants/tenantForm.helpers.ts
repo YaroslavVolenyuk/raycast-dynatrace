@@ -10,9 +10,9 @@ export const DEFAULT_SSO_ENDPOINT = "https://sso.dynatrace.com/sso/oauth2/token"
 /**
  * Least-privilege, read-only Grail/platform scopes that cover the commands this
  * extension ships today (logs + future problems/entities/spans/events). Users
- * can trim or extend these in the form; write scopes are intentionally absent.
+ * can trim or extend these in the form; this is the default a new tenant gets.
  */
-export const DEFAULT_READONLY_SCOPES = [
+export const READ_ONLY_SCOPES = [
   "storage:logs:read",
   "storage:problems:read",
   "storage:events:read",
@@ -21,6 +21,17 @@ export const DEFAULT_READONLY_SCOPES = [
   "storage:metrics:read",
   "storage:bizevents:read",
   "storage:buckets:read",
+] as const;
+
+/**
+ * Write scopes — opt-in only. Not part of the default tenant; surfaced for the
+ * future Read-only/Operate safety model (plan §Phase 3) where mutating commands
+ * (workflow execute, settings write) require explicit elevation.
+ */
+export const WRITE_SCOPES = [
+  "automation:workflows:write",
+  "automation:workflows:run",
+  "settings:objects:write",
 ] as const;
 
 /** Raw values straight off the Raycast <Form>. All strings (checkbox aside). */
@@ -35,7 +46,10 @@ export interface TenantFormValues {
   useClassicProxy: boolean;
 }
 
-/** Splits the free-text scopes field on whitespace and/or commas, de-duped. */
+/**
+ * Splits the scopes field (one scope per line, but whitespace/commas also
+ * tolerated) into a de-duped list.
+ */
 export function parseScopes(input: string): string[] {
   const parts = input
     .split(/[\s,]+/)

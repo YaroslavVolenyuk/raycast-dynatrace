@@ -4,7 +4,7 @@ import {
   validateForm,
   buildTenantConfig,
   DEFAULT_SSO_ENDPOINT,
-  DEFAULT_READONLY_SCOPES,
+  READ_ONLY_SCOPES,
   type TenantFormValues,
 } from "../tenantForm.helpers";
 
@@ -14,7 +14,7 @@ const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValue
   clientId: "dt0s02.ABC",
   clientSecret: "dt0s02.ABC.SECRET",
   ssoEndpoint: DEFAULT_SSO_ENDPOINT,
-  scopes: DEFAULT_READONLY_SCOPES.join(" "),
+  scopes: READ_ONLY_SCOPES.join("\n"),
   accountUrn: "",
   useClassicProxy: true,
   ...overrides,
@@ -23,6 +23,13 @@ const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValue
 describe("parseScopes", () => {
   it("splits on whitespace and commas and de-dupes", () => {
     expect(parseScopes("a b,c  a")).toEqual(["a", "b", "c"]);
+  });
+
+  it("splits one-scope-per-line (TextArea input)", () => {
+    expect(parseScopes("storage:logs:read\nstorage:problems:read\n\n")).toEqual([
+      "storage:logs:read",
+      "storage:problems:read",
+    ]);
   });
 
   it("returns [] for empty / whitespace input", () => {

@@ -1,7 +1,7 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "raycast-dynatrace",
-  "title": "Dynatrace",
+  "title": "DT: Dynatrace connector",
   "description": "Monitor your Dynatrace environment directly from Raycast — logs, problems, DQL, deployments and entities.",
   "icon": "dynatrace-icon.png",
   "author": "yaroslav_volenyuk",
