@@ -122,14 +122,13 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
         <List.Item
           key={`${entry.timestamp}-${index}`}
           icon={{ source: Icon.Document, tintColor: levelColor(entry.level) }}
-          title={entry.service ?? "Unknown service"}
+          title={{ value: `${entry.service ?? "Unknown service"} · ${relativeTime(entry.timestamp)}`, tooltip: entry.timestamp }}
           subtitle={(() => {
             // Strip leading [service-name] prefix since the title already shows the service
             const stripped = entry.content.replace(/^\[[^\]]+\]\s*/, "");
             return stripped.length > 55 ? stripped.slice(0, 52) + "…" : stripped;
           })()}
           accessories={[
-            { icon: Icon.Clock, text: relativeTime(entry.timestamp), tooltip: entry.timestamp },
             { tag: { value: entry.status ?? entry.level, color: levelColor(entry.status ?? entry.level) } },
           ]}
           actions={
