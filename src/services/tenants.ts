@@ -70,10 +70,13 @@ export async function deleteTenant(id: string): Promise<void> {
   const tenants = await readAll();
   await writeAll(tenants.filter((t) => t.id !== id));
 
-  // Clear active if deleted
+  // Deleting the active tenant hands "active" to the first remaining one, so the
+  // other commands keep working instead of asking the user to pick again.
   const activeId = await LocalStorage.getItem<string>(StorageKeys.tenantsActive);
   if (activeId === id) {
-    await LocalStorage.removeItem(StorageKeys.tenantsActive);
+    const remaining = tenants.filter((t) => t.id !== id);
+    if (remaining.length > 0) await LocalStorage.setItem(StorageKeys.tenantsActive, remaining[0].id);
+    else await LocalStorage.removeItem(StorageKeys.tenantsActive);
   }
 }
 
@@ -85,18 +88,12 @@ export async function getActiveTenant(): Promise<TenantConfig | null> {
   if (activeId) {
     const found = tenants.find((t) => t.id === activeId);
     if (found) return found;
-    // Active ID points to a deleted tenant — clean up dangling ref
-    await LocalStorage.removeItem(StorageKeys.tenantsActive);
   }
 
-  // Exactly one tenant: auto-select it without silently switching in multi-tenant setups
-  if (tenants.length === 1) {
-    await LocalStorage.setItem(StorageKeys.tenantsActive, tenants[0].id);
-    return tenants[0];
-  }
-
-  // Multiple tenants and no active selection — require explicit choice
-  return null;
+  // No (valid) active selection while tenants exist: fall back to the first one.
+  // Leaving none active made every command claim "no tenant" with tenants present.
+  await LocalStorage.setItem(StorageKeys.tenantsActive, tenants[0].id);
+  return tenants[0];
 }
 
 export async function setActiveTenant(id: string): Promise<void> {

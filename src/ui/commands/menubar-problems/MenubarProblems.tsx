@@ -16,7 +16,7 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { liveTransport, listProblems, type ProblemEntry, type TenantConfig } from "../../../sdk";
-import { getActiveTenant, listTenants } from "../../../services/tenants";
+import { getActiveTenant } from "../../../services/tenants";
 import { buildProblemUrl } from "../../lib/deepLinks";
 import { classifyProblemsError, type ProblemsErrorInfo } from "../../lib/problemsError";
 import { shouldFetch } from "../../lib/refreshThrottle";
@@ -27,7 +27,6 @@ const RETRY_AFTER_ERROR_MS = 10 * 60_000;
 
 type Result =
   | { state: "no-tenant" }
-  | { state: "select-tenant" }
   | { state: "ok"; endpoint: string; problems: ProblemEntry[]; hasMore: boolean }
   | { state: "error"; endpoint?: string; error: ProblemsErrorInfo };
 
@@ -72,7 +71,7 @@ async function load(): Promise<Result> {
   // Reading the active tenant is local and free; only the Grail query is throttled.
   const tenant = await getActiveTenant();
   // "No tenant" is never cached: it must clear as soon as a tenant is added.
-  if (!tenant) return { state: (await listTenants()).length > 0 ? "select-tenant" : "no-tenant" };
+  if (!tenant) return { state: "no-tenant" };
 
   // Tenant, credentials, scopes, lookback and filter all change what the cached result means.
   const signature = JSON.stringify([
@@ -159,15 +158,6 @@ export default function MenubarProblems() {
         tooltip="No Dynatrace tenant configured"
       >
         <MenuBarExtra.Item title="Configure Tenant" icon={Icon.Gear} onAction={openManageTenants} />
-        <MenuBarExtra.Item title="Refresh" icon={Icon.RotateClockwise} onAction={() => revalidate()} />
-      </MenuBarExtra>
-    );
-  }
-
-  if (data?.state === "select-tenant") {
-    return (
-      <MenuBarExtra icon={{ source: Icon.Gear, tintColor: Color.SecondaryText }} tooltip="Select a Dynatrace tenant">
-        <MenuBarExtra.Item title="Select a Tenant" icon={Icon.Gear} onAction={openManageTenants} />
         <MenuBarExtra.Item title="Refresh" icon={Icon.RotateClockwise} onAction={() => revalidate()} />
       </MenuBarExtra>
     );

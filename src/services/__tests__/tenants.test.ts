@@ -3,6 +3,7 @@
 import { LocalStorage } from "@raycast/api";
 import { listTenants, saveTenant, deleteTenant, getActiveTenant, setActiveTenant } from "../tenants";
 import type { TenantConfig } from "../../sdk/auth";
+import { StorageKeys } from "../storageKeys";
 
 // Reset in-memory LocalStorage mock between tests
 const ls = LocalStorage as unknown as { _clear: () => void };
@@ -71,11 +72,20 @@ describe("saveTenant / deleteTenant round-trip", () => {
     expect(all[0].id).toBe("t2");
   });
 
-  it("clears the active key when the active tenant is deleted", async () => {
+  it("clears the active key when the last tenant is deleted", async () => {
     await saveTenant(makeTenant("active-one"));
     await setActiveTenant("active-one");
     await deleteTenant("active-one");
     expect(await getActiveTenant()).toBeNull();
+  });
+
+  it("makes another tenant active when the active one is deleted", async () => {
+    await saveTenant(makeTenant("first"));
+    await saveTenant(makeTenant("second"));
+    await setActiveTenant("second");
+    await deleteTenant("second");
+    expect(await LocalStorage.getItem(StorageKeys.tenantsActive)).toBe("first");
+    expect((await getActiveTenant())?.id).toBe("first");
   });
 });
 
@@ -96,9 +106,16 @@ describe("getActiveTenant", () => {
     expect((await getActiveTenant())?.id).toBe("second");
   });
 
-  it("returns null with multiple tenants and no explicit active selection", async () => {
+  it("falls back to the first tenant with multiple tenants and no active selection", async () => {
     await saveTenant(makeTenant("first"));
     await saveTenant(makeTenant("second"));
-    expect(await getActiveTenant()).toBeNull();
+    expect((await getActiveTenant())?.id).toBe("first");
+  });
+
+  it("falls back to the first tenant when the active id is dangling", async () => {
+    await saveTenant(makeTenant("first"));
+    await saveTenant(makeTenant("second"));
+    await setActiveTenant("gone");
+    expect((await getActiveTenant())?.id).toBe("first");
   });
 });
