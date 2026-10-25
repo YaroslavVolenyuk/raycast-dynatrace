@@ -5,6 +5,8 @@ import {
   buildTenantConfig,
   DEFAULT_SSO_ENDPOINT,
   READ_ONLY_SCOPES,
+  REQUIRED_SCOPES,
+  describeScopeCheck,
   type TenantFormValues,
 } from "../tenantForm.helpers";
 
@@ -98,5 +100,30 @@ describe("buildTenantConfig", () => {
   it("keeps an explicit SSO override", () => {
     const cfg = buildTenantConfig(validValues({ ssoEndpoint: "https://custom.sso.example.com/token" }));
     expect(cfg.ssoEndpoint).toBe("https://custom.sso.example.com/token");
+  });
+});
+
+describe("describeScopeCheck", () => {
+  const withScopes = (scopes: string[]) => ({ scopes });
+
+  it("is a clean success when everything is granted", () => {
+    expect(describeScopeCheck(withScopes([...READ_ONLY_SCOPES]))).toEqual({
+      style: "success",
+      title: "Connection verified",
+      message: undefined,
+    });
+  });
+
+  it("only hints (success) when just the optional events scope is missing", () => {
+    const r = describeScopeCheck(withScopes([...REQUIRED_SCOPES]));
+    expect(r.style).toBe("success");
+    expect(r.message).toContain("storage:events:read");
+  });
+
+  it("fails when a required scope is missing", () => {
+    const r = describeScopeCheck(withScopes(["storage:logs:read"]));
+    expect(r.style).toBe("failure");
+    expect(r.message).toContain("storage:spans:read");
+    expect(r.message).not.toContain("storage:events:read");
   });
 });

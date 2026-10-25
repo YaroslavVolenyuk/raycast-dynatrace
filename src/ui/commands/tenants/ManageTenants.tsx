@@ -16,8 +16,8 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
-import { findMissingScopes, validateTenantCredentials } from "../../../sdk/auth";
-import { READ_ONLY_SCOPES } from "./tenantForm.helpers";
+import { validateTenantCredentials } from "../../../sdk/auth";
+import { describeScopeCheck } from "./tenantForm.helpers";
 import { listTenants, getActiveTenant, setActiveTenant, deleteTenant } from "../../../services";
 import TenantForm from "./TenantForm";
 
@@ -46,11 +46,10 @@ export default function ManageTenants() {
     const toast = await showToast({ style: Toast.Style.Animated, title: `Testing ${tenant.name}…` });
     const result = await validateTenantCredentials(tenant);
     if (result.valid) {
-      toast.style = Toast.Style.Success;
-      const missing = findMissingScopes(tenant, READ_ONLY_SCOPES);
-      toast.style = missing.length ? Toast.Style.Failure : Toast.Style.Success;
-      toast.title = missing.length ? "Connected, but scopes are missing" : "Connection verified";
-      if (missing.length) toast.message = `Queries may return empty results. Add: ${missing.join(", ")}`;
+      const check = describeScopeCheck(tenant);
+      toast.style = check.style === "failure" ? Toast.Style.Failure : Toast.Style.Success;
+      toast.title = check.title;
+      if (check.message) toast.message = check.message;
     } else {
       toast.style = Toast.Style.Failure;
       toast.title = "Connection failed";
@@ -108,13 +107,13 @@ export default function ManageTenants() {
                     <Action
                       title="Edit Tenant"
                       icon={Icon.Pencil}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                      shortcut={{ modifiers: ["cmd"], key: "e" }}
                       onAction={() => push(<TenantForm tenant={tenant} onSaved={revalidate} />)}
                     />
                     <Action
                       title="Test Connection"
                       icon={Icon.Plug}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                      shortcut={{ modifiers: ["cmd"], key: "t" }}
                       onAction={() => handleTest(tenant)}
                     />
                   </ActionPanel.Section>
@@ -122,13 +121,13 @@ export default function ManageTenants() {
                     <Action
                       title="Add Tenant"
                       icon={Icon.Plus}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                      shortcut={{ modifiers: ["cmd"], key: "n" }}
                       onAction={() => push(<TenantForm onSaved={revalidate} />)}
                     />
                     <Action.CopyToClipboard
                       title="Copy Environment URL"
                       content={tenant.tenantEndpoint}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                      shortcut={{ modifiers: ["cmd"], key: "." }}
                     />
                   </ActionPanel.Section>
                   <ActionPanel.Section>

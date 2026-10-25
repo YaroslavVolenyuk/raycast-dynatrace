@@ -6,9 +6,15 @@
 import { Form, ActionPanel, Action, Icon, Alert, confirmAlert, showToast, Toast, useNavigation } from "@raycast/api";
 import { useState } from "react";
 import type { TenantConfig } from "../../../sdk/auth";
-import { findMissingScopes, validateTenantCredentials } from "../../../sdk/auth";
+import { validateTenantCredentials } from "../../../sdk/auth";
 import { saveTenant, setActiveTenant, listTenants, deleteTenant } from "../../../services";
-import { READ_ONLY_SCOPES, buildTenantConfig, validateForm, type TenantFormValues } from "./tenantForm.helpers";
+import {
+  READ_ONLY_SCOPES,
+  buildTenantConfig,
+  describeScopeCheck,
+  validateForm,
+  type TenantFormValues,
+} from "./tenantForm.helpers";
 
 interface TenantFormProps {
   /** Existing tenant to edit. Omit to create a new one. */
@@ -46,10 +52,10 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
           toast.message = result.error;
           return; // keep the form open so the user can fix credentials
         }
-        const missing = findMissingScopes(config, READ_ONLY_SCOPES);
-        toast.style = missing.length ? Toast.Style.Failure : Toast.Style.Success;
-        toast.title = missing.length ? "Connected, but scopes are missing" : "Connection verified";
-        if (missing.length) toast.message = `Queries may return empty results. Add: ${missing.join(", ")}`;
+        const check = describeScopeCheck(config);
+        toast.style = check.style === "failure" ? Toast.Style.Failure : Toast.Style.Success;
+        toast.title = check.title;
+        if (check.message) toast.message = check.message;
       }
 
       await saveTenant(config);

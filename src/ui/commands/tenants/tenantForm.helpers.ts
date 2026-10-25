@@ -3,7 +3,7 @@
 // without rendering Raycast components.
 
 import type { TenantConfig } from "../../../sdk/auth";
-import { PROD_SSO_ENDPOINT } from "../../../sdk/auth";
+import { PROD_SSO_ENDPOINT, findMissingScopes } from "../../../sdk/auth";
 
 /**
  * Dynatrace SSO token endpoint for production SaaS environments. Used when the
@@ -12,17 +12,49 @@ import { PROD_SSO_ENDPOINT } from "../../../sdk/auth";
 export const DEFAULT_SSO_ENDPOINT = PROD_SSO_ENDPOINT;
 
 /**
- * Least-privilege, read-only scope set. Only includes scopes for commands that
- * have been migrated into this extension. Add a scope here only when the
- * corresponding command ships.
+ * Least-privilege, read-only scope sets, split by who needs them.
  *
- * Current commands:
- *   - dt-search-logs   → storage:logs:read  (verified live 2026-06-26)
- *   - dt-search-traces → storage:spans:read
- *   - all Grail reads  → storage:buckets:read (without it Grail silently returns
- *                        empty results instead of a 403)
+ * Required (Search Logs, Search Traces):
+ *   - storage:logs:read, storage:spans:read
+ *   - storage:buckets:read — without it Grail silently returns empty results
+ *     instead of a 403
+ *
+ * Optional (single feature, soft warning only):
+ *   - storage:events:read — Problems in Menu Bar (macOS)
  */
-export const READ_ONLY_SCOPES = ["storage:buckets:read", "storage:logs:read", "storage:spans:read"] as const;
+export const REQUIRED_SCOPES = ["storage:buckets:read", "storage:logs:read", "storage:spans:read"] as const;
+export const OPTIONAL_SCOPES = ["storage:events:read"] as const;
+
+/** Suggested set for new tenants: everything the extension can use. */
+export const READ_ONLY_SCOPES = [...REQUIRED_SCOPES, ...OPTIONAL_SCOPES] as const;
+
+export interface ScopeCheckToast {
+  style: "success" | "failure";
+  title: string;
+  message?: string;
+}
+
+/**
+ * Toast content after a successful connection test. Missing required scopes are
+ * a failure; a missing optional scope is only a hint on an otherwise green toast.
+ */
+export function describeScopeCheck(tenant: Pick<TenantConfig, "scopes">): ScopeCheckToast {
+  const missingRequired = findMissingScopes(tenant, REQUIRED_SCOPES);
+  if (missingRequired.length > 0) {
+    return {
+      style: "failure",
+      title: "Connected, but scopes are missing",
+      message: `Queries may return empty results. Add: ${missingRequired.join(", ")}`,
+    };
+  }
+  const missingOptional = findMissingScopes(tenant, OPTIONAL_SCOPES);
+  return {
+    style: "success",
+    title: "Connection verified",
+    message:
+      missingOptional.length > 0 ? `Optional: add ${missingOptional.join(", ")} for Problems in Menu Bar` : undefined,
+  };
+}
 
 /** Raw values straight off the Raycast <Form>. All strings (checkbox aside). */
 export interface TenantFormValues {
