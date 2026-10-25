@@ -29,6 +29,10 @@ export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
   if (/extra dql filter/i.test(detail)) {
     return { kind: "config", summary: "Invalid Extra DQL Filter — check extension preferences", detail };
   }
+  // Name of the environment host does not resolve while the SSO answered: the URL is wrong.
+  if (/environment url not found/i.test(detail)) {
+    return { kind: "config", summary: "Environment URL not found — check Manage Tenants", detail };
+  }
   if (/endpoint url|html page/i.test(detail)) {
     return { kind: "config", summary: "Tenant endpoint looks wrong", detail };
   }

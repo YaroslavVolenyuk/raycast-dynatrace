@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { useMemo, useState } from "react";
 import { listLogs, LOGS_REQUIRED_SCOPES, type LogEntry, type LogLevel } from "../../../sdk/resources";
@@ -32,7 +32,8 @@ function levelColor(level: string): Color {
 }
 
 function relativeTime(timestamp: string): string {
-  const diffMin = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000);
+  // Clamp: clock skew between machine and Dynatrace can put a timestamp in the future.
+  const diffMin = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000));
   return diffMin < 60
     ? `${diffMin}m`
     : diffMin < 1440
@@ -99,6 +100,11 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
           actions={
             <ActionPanel>
               <Action title="Retry" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
+              <Action
+                title="Open Manage Tenants"
+                icon={Icon.Gear}
+                onAction={() => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated })}
+              />
             </ActionPanel>
           }
         />
@@ -122,7 +128,10 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
         <List.Item
           key={`${entry.timestamp}-${index}`}
           icon={{ source: Icon.Document, tintColor: levelColor(entry.level) }}
-          title={{ value: `${entry.service ?? "Unknown service"} · ${relativeTime(entry.timestamp)}`, tooltip: entry.timestamp }}
+          title={{
+            value: `${entry.service ?? "Unknown service"} · ${relativeTime(entry.timestamp)}`,
+            tooltip: entry.timestamp,
+          }}
           subtitle={(() => {
             // Strip leading [service-name] prefix since the title already shows the service
             const stripped = entry.content.replace(/^\[[^\]]+\]\s*/, "");

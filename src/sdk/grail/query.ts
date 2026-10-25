@@ -5,6 +5,7 @@
 import { ZodError } from "zod";
 import { getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
 import { grailResponseSchema } from "./schema";
+import { environmentNetworkError, isNetworkError, ssoNetworkError } from "./network";
 
 export interface GrailQueryOptions {
   timeframe?: { start: string; end: string };
@@ -82,6 +83,7 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
     if (authErr instanceof OAuthError) {
       throw new Error(`OAuth error: check client_id / client_secret in Manage Tenants (${authErr.statusCode})`);
     }
+    if (isNetworkError(authErr)) throw ssoNetworkError(authErr, tenant.ssoEndpoint);
     throw authErr;
   }
 
@@ -112,6 +114,7 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
       }
       throw fetchErr; // let caller handle user abort (AbortError swallowed as null in hook)
     }
+    if (isNetworkError(fetchErr)) throw environmentNetworkError(fetchErr, endpoint);
     throw fetchErr;
   } finally {
     clearTimeout(timeout);

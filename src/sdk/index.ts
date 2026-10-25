@@ -18,6 +18,13 @@ export {
   validateTenantCredentials,
   findMissingScopes,
 } from "./auth";
-export { escapeDqlString, grailResponseSchema, executeDqlQuery, type GrailQueryOptions } from "./grail";
+export {
+  escapeDqlString,
+  grailResponseSchema,
+  executeDqlQuery,
+  testTenantConnection,
+  type GrailQueryOptions,
+  type ConnectionTestResult,
+} from "./grail";
 export { type DynatraceTransport, liveTransport } from "./transport";
 export * from "./resources";

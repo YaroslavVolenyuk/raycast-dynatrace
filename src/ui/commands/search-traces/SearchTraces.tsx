@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { useMemo, useState } from "react";
 import {
@@ -125,6 +125,11 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
           actions={
             <ActionPanel>
               <Action title="Retry" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
+              <Action
+                title="Open Manage Tenants"
+                icon={Icon.Gear}
+                onAction={() => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated })}
+              />
             </ActionPanel>
           }
         />

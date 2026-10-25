@@ -281,3 +281,22 @@ describe("timeout and abort", () => {
     ).rejects.toMatchObject({ name: "AbortError" });
   });
 });
+
+describe("network failures", () => {
+  it("names a non-existent environment host", async () => {
+    mockGetAccessToken.mockResolvedValueOnce("token");
+    mockFetch.mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }));
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(
+      "Environment URL not found: test.live.dynatrace.com",
+    );
+  });
+
+  it("reports an unreachable SSO as a network problem", async () => {
+    mockGetAccessToken.mockRejectedValueOnce(
+      Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }),
+    );
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(
+      "Cannot reach the SSO endpoint sso.dynatrace.com",
+    );
+  });
+});

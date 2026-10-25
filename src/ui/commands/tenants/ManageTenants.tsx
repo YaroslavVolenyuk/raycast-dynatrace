@@ -16,7 +16,7 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
-import { validateTenantCredentials } from "../../../sdk/auth";
+import { testTenantConnection } from "../../../sdk";
 import { describeScopeCheck } from "./tenantForm.helpers";
 import { listTenants, getActiveTenant, setActiveTenant, deleteTenant } from "../../../services";
 import TenantForm from "./TenantForm";
@@ -44,7 +44,7 @@ export default function ManageTenants() {
 
   async function handleTest(tenant: TenantConfig) {
     const toast = await showToast({ style: Toast.Style.Animated, title: `Testing ${tenant.name}…` });
-    const result = await validateTenantCredentials(tenant);
+    const result = await testTenantConnection(tenant);
     if (result.valid) {
       const check = describeScopeCheck(tenant);
       toast.style = check.style === "failure" ? Toast.Style.Failure : Toast.Style.Success;

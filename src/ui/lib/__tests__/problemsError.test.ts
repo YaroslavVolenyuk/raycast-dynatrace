@@ -34,3 +34,10 @@ describe("classifyProblemsError — query errors", () => {
     expect(classifyProblemsError(new Error("Extra DQL filter must be a single expression")).kind).toBe("config");
   });
 });
+
+describe("classifyProblemsError — environment URL", () => {
+  it("treats a non-existent environment host as config, not as a network outage", () => {
+    const r = classifyProblemsError(new Error("Environment URL not found: x.apps.dynatrace.ua does not exist."));
+    expect(r.kind).toBe("config");
+  });
+});
