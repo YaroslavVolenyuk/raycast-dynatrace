@@ -108,13 +108,13 @@ export default function ManageTenants() {
                     <Action
                       title="Edit Tenant"
                       icon={Icon.Pencil}
-                      shortcut={{ modifiers: ["cmd"], key: "e" }}
+                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
                       onAction={() => push(<TenantForm tenant={tenant} onSaved={revalidate} />)}
                     />
                     <Action
                       title="Test Connection"
                       icon={Icon.Plug}
-                      shortcut={{ modifiers: ["cmd"], key: "t" }}
+                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
                       onAction={() => handleTest(tenant)}
                     />
                   </ActionPanel.Section>
@@ -122,13 +122,13 @@ export default function ManageTenants() {
                     <Action
                       title="Add Tenant"
                       icon={Icon.Plus}
-                      shortcut={{ modifiers: ["cmd"], key: "n" }}
+                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
                       onAction={() => push(<TenantForm onSaved={revalidate} />)}
                     />
                     <Action.CopyToClipboard
                       title="Copy Environment URL"
                       content={tenant.tenantEndpoint}
-                      shortcut={{ modifiers: ["cmd"], key: "." }}
+                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
                     />
                   </ActionPanel.Section>
                   <ActionPanel.Section>

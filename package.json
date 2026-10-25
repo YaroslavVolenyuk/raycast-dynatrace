@@ -144,13 +144,34 @@
           "type": "dropdown",
           "placeholder": "Last 24h",
           "data": [
-            { "title": "Last 15 min", "value": "15m" },
-            { "title": "Last 30 min", "value": "30m" },
-            { "title": "Last 1h",     "value": "1h"  },
-            { "title": "Last 6h",     "value": "6h"  },
-            { "title": "Last 24h",    "value": "24h" },
-            { "title": "Last 3d",     "value": "3d"  },
-            { "title": "Last 7d",     "value": "7d"  }
+            {
+              "title": "Last 15 min",
+              "value": "15m"
+            },
+            {
+              "title": "Last 30 min",
+              "value": "30m"
+            },
+            {
+              "title": "Last 1h",
+              "value": "1h"
+            },
+            {
+              "title": "Last 6h",
+              "value": "6h"
+            },
+            {
+              "title": "Last 24h",
+              "value": "24h"
+            },
+            {
+              "title": "Last 3d",
+              "value": "3d"
+            },
+            {
+              "title": "Last 7d",
+              "value": "7d"
+            }
           ],
           "required": false
         },
@@ -164,10 +185,10 @@
     }
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22.22.2"
   },
   "dependencies": {
-    "@raycast/api": "^1.104.23",
+    "@raycast/api": "^2.9.0",
     "@raycast/utils": "^2.2.7",
     "zod": "4.3.6"
   },
