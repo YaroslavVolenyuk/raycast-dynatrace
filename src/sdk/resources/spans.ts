@@ -174,6 +174,9 @@ export function formatDuration(us: number): string {
 export type SpanStatus = "error" | "ok" | "unset" | "all";
 export const SPAN_PAGE_SIZE = 100;
 
+/** `storage:buckets:read` is needed too: without it Grail returns empty results instead of a 403. */
+export const SPANS_REQUIRED_SCOPES = ["storage:buckets:read", "storage:spans:read"] as const;
+
 // Grail stores span.status_code LOWER-CASE ("ok"|"error"|"unset"). The Dynatrace
 // UI title-cases it for display, but the DQL filter must use the raw lower-case
 // value — `== "ERROR"` matches zero records.
@@ -241,7 +244,7 @@ export async function listSpans(
     timeframe: opts.timeframe,
     signal: opts.signal,
     maxResultRecords: opts.limit ?? SPAN_PAGE_SIZE,
-    requiredScopes: ["storage:spans:read"],
+    requiredScopes: SPANS_REQUIRED_SCOPES,
   });
 
   const entries: SpanEntry[] = [];

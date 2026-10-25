@@ -39,10 +39,12 @@ Tracing explorer for the corresponding trace.
 1. In Dynatrace, go to **Account Management → Identity & access management →
    OAuth clients** and create a new OAuth client.
 2. Grant the client these scopes:
+   - `storage:buckets:read` (required for all searches — without it Dynatrace
+     returns empty results instead of an error)
    - `storage:logs:read` (required for Search Logs)
    - `storage:spans:read` (required for Search Traces)
 3. In Raycast, run **Manage Tenants** and add a tenant. The scope fields are
-   pre-filled with the two scopes above. You'll need:
+   pre-filled with the scopes above. You'll need:
    - the environment URL, in the form `https://<environment-id>.apps.dynatrace.com`
    - the OAuth client ID and client secret from step 1
 4. Use **Test** in Manage Tenants to confirm the credentials work before

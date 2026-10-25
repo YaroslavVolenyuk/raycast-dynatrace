@@ -97,6 +97,9 @@ export type LogLevel = "error" | "warn" | "info" | "none" | "all";
 
 export const LOG_PAGE_SIZE = 100;
 
+/** `storage:buckets:read` is needed too: without it Grail returns empty results instead of a 403. */
+export const LOGS_REQUIRED_SCOPES = ["storage:buckets:read", "storage:logs:read"] as const;
+
 // Maps UI filter values to Dynatrace `status` field values.
 const LOG_LEVEL_MAP: Record<LogLevel, string | null> = {
   error: "ERROR",
@@ -160,7 +163,7 @@ export async function listLogs(
     timeframe: opts.timeframe,
     signal: opts.signal,
     maxResultRecords: opts.limit ?? LOG_PAGE_SIZE,
-    requiredScopes: ["storage:logs:read"],
+    requiredScopes: LOGS_REQUIRED_SCOPES,
   });
 
   const entries: LogEntry[] = [];

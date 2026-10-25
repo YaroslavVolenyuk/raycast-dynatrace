@@ -10,7 +10,14 @@
  *   - grail/     DQL execution + escapeDqlString
  *   - resources/ one module per resource (logs, spans)
  */
-export { type TenantConfig, OAuthError, getAccessToken, invalidateTokenCache, validateTenantCredentials } from "./auth";
+export {
+  type TenantConfig,
+  OAuthError,
+  getAccessToken,
+  invalidateTokenCache,
+  validateTenantCredentials,
+  findMissingScopes,
+} from "./auth";
 export { escapeDqlString, grailResponseSchema, executeDqlQuery, type GrailQueryOptions } from "./grail";
 export { type DynatraceTransport, liveTransport } from "./transport";
 export * from "./resources";

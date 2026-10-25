@@ -16,7 +16,8 @@ import {
 } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
-import { validateTenantCredentials } from "../../../sdk/auth";
+import { findMissingScopes, validateTenantCredentials } from "../../../sdk/auth";
+import { READ_ONLY_SCOPES } from "./tenantForm.helpers";
 import { listTenants, getActiveTenant, setActiveTenant, deleteTenant } from "../../../services";
 import TenantForm from "./TenantForm";
 
@@ -46,7 +47,10 @@ export default function ManageTenants() {
     const result = await validateTenantCredentials(tenant);
     if (result.valid) {
       toast.style = Toast.Style.Success;
-      toast.title = "Connection verified";
+      const missing = findMissingScopes(tenant, READ_ONLY_SCOPES);
+      toast.style = missing.length ? Toast.Style.Failure : Toast.Style.Success;
+      toast.title = missing.length ? "Connected, but scopes are missing" : "Connection verified";
+      if (missing.length) toast.message = `Queries may return empty results. Add: ${missing.join(", ")}`;
     } else {
       toast.style = Toast.Style.Failure;
       toast.title = "Connection failed";

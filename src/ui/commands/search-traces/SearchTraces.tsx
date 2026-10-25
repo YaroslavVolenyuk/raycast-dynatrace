@@ -1,9 +1,16 @@
 import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { useMemo, useState } from "react";
-import { listSpans, formatDuration, type SpanEntry, type SpanStatus } from "../../../sdk/resources";
+import {
+  listSpans,
+  formatDuration,
+  SPANS_REQUIRED_SCOPES,
+  type SpanEntry,
+  type SpanStatus,
+} from "../../../sdk/resources";
 import { liveTransport } from "../../../sdk";
 import { useActiveTenant } from "../../hooks";
+import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
 import EmptyTenantState from "../../components/EmptyTenantState";
 import TraceDetail from "./TraceDetail";
@@ -146,7 +153,11 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
       <List.EmptyView
         icon={Icon.MagnifyingGlass}
         title="No spans found"
-        description="Try a different timeframe or remove the trace filter."
+        description={emptyDescription(
+          tenant,
+          SPANS_REQUIRED_SCOPES,
+          "Try a different timeframe or remove the trace filter.",
+        )}
       />
       {entries.map((entry, index) => (
         <List.Item

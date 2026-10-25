@@ -135,6 +135,11 @@ export async function getAccessToken(tenant: TenantConfig): Promise<string> {
   return tokenData.access_token;
 }
 
+/** Scopes from `required` that the tenant's configured scope list does not include. */
+export function findMissingScopes(tenant: Pick<TenantConfig, "scopes">, required: readonly string[]): string[] {
+  return required.filter((scope) => !tenant.scopes.includes(scope));
+}
+
 /**
  * Invalidate cached token for a tenant (force refresh on next call).
  */

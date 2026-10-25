@@ -1,9 +1,10 @@
 import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { useMemo, useState } from "react";
-import { listLogs, type LogEntry, type LogLevel } from "../../../sdk/resources";
+import { listLogs, LOGS_REQUIRED_SCOPES, type LogEntry, type LogLevel } from "../../../sdk/resources";
 import { liveTransport } from "../../../sdk";
 import { useActiveTenant } from "../../hooks";
+import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
 import EmptyTenantState from "../../components/EmptyTenantState";
 import LogDetail from "./LogDetail";
@@ -115,7 +116,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
       <List.EmptyView
         icon={Icon.MagnifyingGlass}
         title="No logs found"
-        description="Try a different log level, timeframe, or search."
+        description={emptyDescription(tenant, LOGS_REQUIRED_SCOPES, "Try a different log level, timeframe, or search.")}
       />
       {entries.map((entry, index) => (
         <List.Item

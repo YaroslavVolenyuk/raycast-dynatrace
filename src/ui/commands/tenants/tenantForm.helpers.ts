@@ -19,8 +19,10 @@ export const DEFAULT_SSO_ENDPOINT = PROD_SSO_ENDPOINT;
  * Current commands:
  *   - dt-search-logs   → storage:logs:read  (verified live 2026-06-26)
  *   - dt-search-traces → storage:spans:read
+ *   - all Grail reads  → storage:buckets:read (without it Grail silently returns
+ *                        empty results instead of a 403)
  */
-export const READ_ONLY_SCOPES = ["storage:logs:read", "storage:spans:read"] as const;
+export const READ_ONLY_SCOPES = ["storage:buckets:read", "storage:logs:read", "storage:spans:read"] as const;
 
 /** Raw values straight off the Raycast <Form>. All strings (checkbox aside). */
 export interface TenantFormValues {
