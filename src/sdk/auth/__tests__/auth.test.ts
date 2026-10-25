@@ -124,3 +124,41 @@ describe("OAuthError — secret redaction", () => {
     expect(err.message).toContain("authentication");
   });
 });
+
+// Editing a tenant keeps its id; a cached token must not vouch for new credentials.
+test("validateTenantCredentials re-checks after the secret changes", async () => {
+  mockTokenResponse("good-token", 600);
+  mockErrorResponse(401, '{"error":"invalid_client"}');
+  const { getAccessToken, validateTenantCredentials } = await loadAuth();
+  await getAccessToken(TENANT);
+  const result = await validateTenantCredentials({ ...TENANT, clientSecret: "garbage" });
+  expect(result.valid).toBe(false);
+  expect(mockFetch).toHaveBeenCalledTimes(2);
+});
+
+test("validateTenantCredentials does not trust a cached token for unchanged credentials", async () => {
+  mockTokenResponse("token-1", 600);
+  mockErrorResponse(401, '{"error":"invalid_client"}');
+  const { getAccessToken, validateTenantCredentials } = await loadAuth();
+  await getAccessToken(TENANT);
+  // e.g. the OAuth client was deleted in Account Management meanwhile
+  expect((await validateTenantCredentials(TENANT)).valid).toBe(false);
+});
+
+test("getAccessToken fetches a new token when credentials change under the same id", async () => {
+  mockTokenResponse("token-a", 600);
+  mockTokenResponse("token-b", 600);
+  const { getAccessToken } = await loadAuth();
+  expect(await getAccessToken(TENANT)).toBe("token-a");
+  expect(await getAccessToken({ ...TENANT, clientSecret: "other" })).toBe("token-b");
+});
+
+// A wrong "SSO endpoint" pointing at a Dynatrace API answers { error: { code, message } }.
+test("validateTenantCredentials never shows [object Object] for a nested error body", async () => {
+  mockErrorResponse(404, '{"error":{"code":404,"message":"Not Found"}}');
+  const { validateTenantCredentials } = await loadAuth();
+  const result = await validateTenantCredentials({ ...TENANT, ssoEndpoint: "https://abc.apps.dynatrace.com" });
+  expect(result.valid === false && result.error).not.toMatch(/object Object/i);
+  expect(result.valid === false && result.error).toMatch(/Not Found/);
+  expect(result.valid === false && result.error).toMatch(/not an SSO token endpoint/);
+});

@@ -6,6 +6,8 @@
  * a standalone TypeScript client (enforced by eslint + CI grep).
  */
 
+import { createHash } from "node:crypto";
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface TenantConfig {
@@ -33,8 +35,17 @@ export const PROD_SSO_ENDPOINT = "https://sso.dynatrace.com/sso/oauth2/token";
 /** Extracts a human-readable reason from an OAuth error body (JSON or form). */
 function describeOAuthBody(body: string): string | null {
   try {
-    const json = JSON.parse(body) as { error?: string; error_description?: string };
-    const parts = [json.error, json.error_description].filter(Boolean);
+    // OAuth servers answer { error: "invalid_client", error_description }; a wrong
+    // "SSO endpoint" pointing at a Dynatrace API answers { error: { code, message } }.
+    const json = JSON.parse(body) as { error?: unknown; error_description?: unknown; message?: unknown };
+    const err = json.error;
+    const nested = err && typeof err === "object" ? (err as { message?: unknown; code?: unknown }) : undefined;
+    const parts = [
+      typeof err === "string" ? err : undefined,
+      typeof nested?.message === "string" ? nested.message : undefined,
+      typeof json.error_description === "string" ? json.error_description : undefined,
+      typeof json.message === "string" ? json.message : undefined,
+    ].filter(Boolean);
     if (parts.length) return parts.join(": ");
   } catch {
     // not JSON — fall through
@@ -66,6 +77,18 @@ const tokenCache = new Map<string, CachedToken>();
 
 const REFRESH_BUFFER_MS = 30_000; // refresh 30 seconds before expiry
 
+/**
+ * Cache key per tenant *and* credential set: editing a tenant keeps its id, and a
+ * token minted with the old secret must not be served for the new one. The
+ * secret is hashed so it never appears in the key itself.
+ */
+function cacheKeyFor(tenant: TenantConfig): string {
+  const fingerprint = createHash("sha256")
+    .update(JSON.stringify([tenant.clientId, tenant.clientSecret, tenant.ssoEndpoint, tenant.scopes]))
+    .digest("hex");
+  return `token:${tenant.id}:${fingerprint}`;
+}
+
 // ── Main function ─────────────────────────────────────────────────────────────
 
 /**
@@ -73,7 +96,7 @@ const REFRESH_BUFFER_MS = 30_000; // refresh 30 seconds before expiry
  * Caches tokens in memory and proactively refreshes 30 seconds before expiry.
  */
 export async function getAccessToken(tenant: TenantConfig): Promise<string> {
-  const cacheKey = `token:${tenant.id}`;
+  const cacheKey = cacheKeyFor(tenant);
 
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.exp - Date.now() > REFRESH_BUFFER_MS) {
@@ -144,8 +167,10 @@ export function findMissingScopes(tenant: Pick<TenantConfig, "scopes">, required
  * Invalidate cached token for a tenant (force refresh on next call).
  */
 export function invalidateTokenCache(tenantId: string): void {
-  const cacheKey = `token:${tenantId}`;
-  tokenCache.delete(cacheKey);
+  const prefix = `token:${tenantId}:`;
+  for (const key of tokenCache.keys()) {
+    if (key.startsWith(prefix)) tokenCache.delete(key);
+  }
 }
 
 /**
@@ -156,6 +181,8 @@ export async function validateTenantCredentials(
   tenant: TenantConfig,
 ): Promise<{ valid: true } | { valid: false; error: string }> {
   try {
+    // A test must ask the SSO, not the cache: the client may have been revoked meanwhile.
+    invalidateTokenCache(tenant.id);
     await getAccessToken(tenant);
     return { valid: true };
   } catch (err) {
@@ -177,7 +204,15 @@ export async function validateTenantCredentials(
       if (err.statusCode === 403) {
         return { valid: false, error: detail ? `Forbidden: ${detail}` : "Forbidden — check scopes and permissions" };
       }
-      return { valid: false, error: detail ? `OAuth ${err.statusCode}: ${detail}` : `OAuth error ${err.statusCode}` };
+      // 404 / an HTML page: the "SSO endpoint" is not a token endpoint at all.
+      const ssoHint =
+        err.statusCode === 404 || err.body.trimStart().startsWith("<")
+          ? " — this is not an SSO token endpoint; leave SSO Token Endpoint blank to use sso.dynatrace.com"
+          : "";
+      return {
+        valid: false,
+        error: `${detail ? `OAuth ${err.statusCode}: ${detail}` : `OAuth error ${err.statusCode}`}${ssoHint}`,
+      };
     }
     if (err instanceof TypeError && err.message.includes("fetch")) {
       return { valid: false, error: "Cannot reach SSO endpoint — check URL and network" };
