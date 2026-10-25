@@ -29,7 +29,7 @@ type Result =
   | { state: "no-tenant" }
   | { state: "select-tenant" }
   | { state: "ok"; endpoint: string; problems: ProblemEntry[]; hasMore: boolean }
-  | { state: "error"; endpoint: string; error: ProblemsErrorInfo };
+  | { state: "error"; endpoint?: string; error: ProblemsErrorInfo };
 
 interface Preferences {
   refreshMinutes?: string;
@@ -121,15 +121,36 @@ const CATEGORY_ICON: Record<string, { source: Icon; tintColor: Color }> = {
 const categoryIcon = (category: string) =>
   CATEGORY_ICON[category] ?? { source: Icon.QuestionMark, tintColor: Color.SecondaryText };
 
+/** load() failures happen before any Dynatrace call — they come from local tenant settings. */
+function describeLoadError(err: unknown): ProblemsErrorInfo {
+  return {
+    kind: "config",
+    summary: "Could not read tenant settings",
+    detail: err instanceof Error ? err.message : String(err),
+  };
+}
+
 const openManageTenants = () => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated });
 
 export default function MenubarProblems() {
-  const { data, isLoading, revalidate: revalidateRaw } = useCachedPromise(load, [], { keepPreviousData: true });
+  const {
+    data: loaded,
+    error: loadError,
+    isLoading,
+    revalidate: revalidateRaw,
+  } = useCachedPromise(load, [], {
+    keepPreviousData: true,
+    // A menu bar command cannot show the default failure toast; the error is rendered in the menu instead.
+    onError: () => {},
+  });
   /** Manual refresh bypasses the interval throttle. */
   const revalidate = () => {
     cache.set(FORCE_KEY, "1");
     revalidateRaw();
   };
+
+  // load() itself failed (e.g. corrupted tenant storage): never fall back to the previous result.
+  const data: Result | undefined = loadError ? { state: "error", error: describeLoadError(loadError) } : loaded;
 
   if (data?.state === "no-tenant") {
     return (
@@ -180,7 +201,7 @@ export default function MenubarProblems() {
               await showHUD("Error details copied");
             }}
           />
-          <MenuBarExtra.Item title="Open Dynatrace" icon={Icon.Globe} onAction={() => open(endpoint)} />
+          {endpoint && <MenuBarExtra.Item title="Open Dynatrace" icon={Icon.Globe} onAction={() => open(endpoint)} />}
         </MenuBarExtra.Section>
       </MenuBarExtra>
     );
