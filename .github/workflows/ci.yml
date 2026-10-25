@@ -31,6 +31,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Build (Raycast CLI — the same gate the Store runs)
+        run: npx ray build -e dist
+
       - name: Architecture boundary (SDK must not import Raycast/React)
         run: |
           if grep -rnE "from \"(@raycast/(api|utils)|react|react-dom)\"" src/sdk; then

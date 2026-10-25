@@ -3,18 +3,12 @@
 // works before it is persisted — the whole point of this command is to get the
 // extension talking to a live environment without relying on mock data.
 
-import { Form, ActionPanel, Action, Icon, showToast, Toast, useNavigation } from "@raycast/api";
+import { Form, ActionPanel, Action, Icon, Alert, confirmAlert, showToast, Toast, useNavigation } from "@raycast/api";
 import { useState } from "react";
 import type { TenantConfig } from "../../../sdk/auth";
 import { validateTenantCredentials } from "../../../sdk/auth";
-import { saveTenant, setActiveTenant, listTenants } from "../../../services";
-import {
-  DEFAULT_SSO_ENDPOINT,
-  READ_ONLY_SCOPES,
-  buildTenantConfig,
-  validateForm,
-  type TenantFormValues,
-} from "./tenantForm.helpers";
+import { saveTenant, setActiveTenant, listTenants, deleteTenant } from "../../../services";
+import { READ_ONLY_SCOPES, buildTenantConfig, validateForm, type TenantFormValues } from "./tenantForm.helpers";
 
 interface TenantFormProps {
   /** Existing tenant to edit. Omit to create a new one. */
@@ -27,13 +21,18 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
   const { pop } = useNavigation();
   const isEdit = !!tenant;
   const [isSaving, setIsSaving] = useState(false);
+  const [scopesText, setScopesText] = useState((tenant?.scopes ?? READ_ONLY_SCOPES).join("\n"));
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof TenantFormValues, string>>>({});
 
   async function persist(values: TenantFormValues, test: boolean) {
     const errors = validateForm(values);
     if (Object.keys(errors).length > 0) {
-      await showToast({ style: Toast.Style.Failure, title: "Please fix the highlighted fields" });
+      setFieldErrors(errors);
+      const firstError = Object.values(errors)[0];
+      await showToast({ style: Toast.Style.Failure, title: "Validation error", message: firstError });
       return;
     }
+    setFieldErrors({});
 
     const config = buildTenantConfig(values, tenant?.id);
     setIsSaving(true);
@@ -75,6 +74,21 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
     }
   }
 
+  async function handleDelete() {
+    if (!tenant) return;
+    const confirmed = await confirmAlert({
+      title: `Delete “${tenant.name}”?`,
+      message: "This removes the stored credentials from this machine. This cannot be undone.",
+      icon: Icon.Trash,
+      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return;
+    await deleteTenant(tenant.id);
+    await showToast({ style: Toast.Style.Success, title: "Tenant deleted", message: tenant.name });
+    onSaved?.();
+    pop();
+  }
+
   return (
     <Form
       isLoading={isSaving}
@@ -90,6 +104,23 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
             icon={Icon.SaveDocument}
             onSubmit={(values) => persist(values as unknown as TenantFormValues, false)}
           />
+          <Action
+            title="Use Read-Only Environment Scopes"
+            icon={Icon.Lock}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "r" }}
+            onAction={() => {
+              setScopesText(READ_ONLY_SCOPES.join("\n"));
+            }}
+          />
+          {isEdit && (
+            <Action
+              title="Delete Tenant"
+              icon={Icon.Trash}
+              style={Action.Style.Destructive}
+              shortcut={{ modifiers: ["ctrl"], key: "x" }}
+              onAction={handleDelete}
+            />
+          )}
         </ActionPanel>
       }
     >
@@ -100,6 +131,8 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
         placeholder="Production"
         defaultValue={tenant?.name ?? ""}
         info="A label to identify this tenant in the switcher."
+        error={fieldErrors.name}
+        onChange={() => setFieldErrors((e) => ({ ...e, name: undefined }))}
       />
       <Form.TextField
         id="tenantEndpoint"
@@ -107,47 +140,47 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
         placeholder="https://abc12345.apps.dynatrace.com"
         defaultValue={tenant?.tenantEndpoint ?? ""}
         info="Your Dynatrace SaaS environment URL (the apps. or live. host)."
+        error={fieldErrors.tenantEndpoint}
+        onChange={() => setFieldErrors((e) => ({ ...e, tenantEndpoint: undefined }))}
       />
       <Form.TextField
         id="clientId"
         title="Client ID"
         placeholder="dt0s02.ABCDEFGH"
         defaultValue={tenant?.clientId ?? ""}
+        error={fieldErrors.clientId}
+        onChange={() => setFieldErrors((e) => ({ ...e, clientId: undefined }))}
       />
       <Form.PasswordField
         id="clientSecret"
         title="Client Secret"
         placeholder="dt0s02.ABCDEFGH.XXXXXXXX…"
         defaultValue={tenant?.clientSecret ?? ""}
-        info="Stored in Raycast LocalStorage (unencrypted on disk). Tokens stay in memory only."
+        info="Stored in Raycast's encrypted local storage, on this machine only. Tokens stay in memory only."
+        error={fieldErrors.clientSecret}
+        onChange={() => setFieldErrors((e) => ({ ...e, clientSecret: undefined }))}
       />
       <Form.Separator />
       <Form.TextArea
         id="scopes"
         title="Scopes"
         placeholder={"storage:logs:read\nstorage:problems:read"}
-        defaultValue={(tenant?.scopes ?? READ_ONLY_SCOPES).join("\n")}
-        info="One OAuth scope per line. Defaults to read-only Grail scopes; add write scopes only if you need Operate-mode commands."
+        value={scopesText}
+        onChange={(v) => {
+          setScopesText(v);
+          setFieldErrors((e) => ({ ...e, scopes: undefined }));
+        }}
+        info="One scope per line. ⌘⇧R loads the read-only environment set. Do NOT mix account-level scopes (account-*, iam:*, app-engine:*) with environment scopes (storage:*, environment-api:*) in one tenant — Dynatrace rejects the combined token request as invalid_request."
+        error={fieldErrors.scopes}
       />
       <Form.TextField
         id="ssoEndpoint"
         title="SSO Token Endpoint"
-        defaultValue={tenant?.ssoEndpoint ?? DEFAULT_SSO_ENDPOINT}
-        info="Override only for non-default SSO (e.g. dev or sprint environments)."
-      />
-      <Form.TextField
-        id="accountUrn"
-        title="Account URN"
-        placeholder="urn:dtaccount:… (optional)"
-        defaultValue={tenant?.accountUrn ?? ""}
-        info="Only needed for account-level OAuth clients."
-      />
-      <Form.Checkbox
-        id="useClassicProxy"
-        title="Classic API Proxy"
-        label="Route classic API calls through /platform/classic/"
-        defaultValue={tenant?.useClassicProxy ?? true}
-        info="Disable if /platform/classic/ returns 404 on your environment."
+        placeholder="Default: sso.dynatrace.com"
+        defaultValue={tenant?.ssoEndpoint ?? ""}
+        info="Leave blank to use sso.dynatrace.com. An OAuth client only works with the SSO it was created on — override only for special setups."
+        error={fieldErrors.ssoEndpoint}
+        onChange={() => setFieldErrors((e) => ({ ...e, ssoEndpoint: undefined }))}
       />
     </Form>
   );

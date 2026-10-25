@@ -1,27 +1,29 @@
-import { List, ActionPanel, Action, Icon, Color, getPreferenceValues, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { useMemo, useState } from "react";
 import { listLogs, type LogEntry, type LogLevel } from "../../../sdk/resources";
-import { resolveTransport } from "../../../services";
+import { liveTransport } from "../../../sdk";
 import { useActiveTenant } from "../../hooks";
 import { parseTimeframe } from "../../lib/parseTimeframe";
-import { MOCK_TENANT } from "../../../mocks";
 import EmptyTenantState from "../../components/EmptyTenantState";
 import LogDetail from "./LogDetail";
 
 interface CommandArguments {
-  timeframeValue?: string;
-  timeframeUnit?: "m" | "h" | "d";
+  timeframe?: string;
   query?: LogLevel;
+  limit?: string;
 }
 
+// Dynatrace `status` field values (aggregated loglevel):
+//   ERROR → SEVERE | ERROR | CRITICAL | ALERT | FATAL | EMERGENCY
+//   WARN  → WARN
+//   INFO  → INFO | DEBUG | NOTICE | TRACE
+//   NONE  → NONE
 const LEVEL_COLORS: Record<string, Color> = {
   ERROR: Color.Red,
-  FATAL: Color.Red,
   WARN: Color.Yellow,
-  WARNING: Color.Yellow,
   INFO: Color.Blue,
-  DEBUG: Color.SecondaryText,
+  NONE: Color.SecondaryText,
 };
 
 function levelColor(level: string): Color {
@@ -30,30 +32,35 @@ function levelColor(level: string): Color {
 
 function relativeTime(timestamp: string): string {
   const diffMin = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000);
-  const raw = diffMin < 60 ? `${diffMin}m` : diffMin < 1440 ? `${Math.floor(diffMin / 60)}h` : `${Math.floor(diffMin / 1440)}d`;
-  return raw.padStart(3, " ");
+  return diffMin < 60
+    ? `${diffMin}m`
+    : diffMin < 1440
+      ? `${Math.floor(diffMin / 60)}h`
+      : `${Math.floor(diffMin / 1440)}d`;
 }
 
 export default function SearchLogs(props: { arguments: CommandArguments }) {
-  const { timeframeValue, timeframeUnit, query } = props.arguments ?? {};
+  const { timeframe: timeframeArg, query, limit: limitArg } = props.arguments ?? {};
   const level = (query || "all") as LogLevel;
-  const timeframeStr = timeframeValue ? `${timeframeValue}${timeframeUnit || "h"}` : "24h";
+  const timeframeStr = timeframeArg || "24h";
+  const limit = limitArg ? parseInt(limitArg, 10) : undefined;
 
   const { push } = useNavigation();
   const [search, setSearch] = useState("");
 
-  const { useMockData } = getPreferenceValues<{ useMockData?: boolean }>();
-  const { tenant: activeTenant, isLoading: tenantLoading } = useActiveTenant();
-  // In mock mode the MockTransport ignores the tenant, so a placeholder lets the
-  // command run end-to-end before the Manage Tenants command exists.
-  const tenant = activeTenant ?? (useMockData ? MOCK_TENANT : null);
+  const { tenant, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
 
   const { data, isLoading, error, revalidate } = useCachedPromise(
-    (lvl: LogLevel, tf: string, tenantId: string) => {
+    (lvl: LogLevel, tf: string, lim: number | undefined, tenantId: string) => {
       void tenantId; // part of the cache key so a tenant switch refetches
-      return listLogs(resolveTransport(), tenant!, { level: lvl, timeframe: parseTimeframe(tf) });
+      return listLogs(liveTransport, tenant!, {
+        level: lvl,
+        timeframeDql: tf,
+        timeframe: parseTimeframe(tf),
+        limit: lim,
+      });
     },
-    [level, timeframeStr, tenant?.id ?? ""],
+    [level, timeframeStr, limit, tenant?.id ?? ""],
     { execute: !!tenant, keepPreviousData: true },
   );
 
@@ -63,6 +70,15 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
     const q = search.toLowerCase();
     return all.filter((e) => e.content.toLowerCase().includes(q) || (e.service ?? "").toLowerCase().includes(q));
   }, [data, search]);
+
+  // A corrupted tenant store must surface as an error, not as "no tenant".
+  if (tenantError) {
+    return (
+      <List isLoading={false}>
+        <List.EmptyView icon={Icon.Warning} title="Could Not Load Tenants" description={tenantError} />
+      </List>
+    );
+  }
 
   if (!tenantLoading && !tenant) {
     return (
@@ -106,14 +122,22 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
           key={`${entry.timestamp}-${index}`}
           icon={{ source: Icon.Document, tintColor: levelColor(entry.level) }}
           title={entry.service ?? "Unknown service"}
-          subtitle={entry.content.length > 80 ? entry.content.slice(0, 77) + "…" : entry.content}
+          subtitle={(() => {
+            // Strip leading [service-name] prefix since the title already shows the service
+            const stripped = entry.content.replace(/^\[[^\]]+\]\s*/, "");
+            return stripped.length > 55 ? stripped.slice(0, 52) + "…" : stripped;
+          })()}
           accessories={[
             { icon: Icon.Clock, text: relativeTime(entry.timestamp), tooltip: entry.timestamp },
-            { tag: { value: entry.level, color: levelColor(entry.level) } },
+            { tag: { value: entry.status ?? entry.level, color: levelColor(entry.status ?? entry.level) } },
           ]}
           actions={
             <ActionPanel>
-              <Action title="Open Details" icon={Icon.ArrowRight} onAction={() => push(<LogDetail entry={entry} />)} />
+              <Action
+                title="Open Details"
+                icon={Icon.ArrowRight}
+                onAction={() => push(<LogDetail entry={entry} tenant={tenant ?? undefined} />)}
+              />
               <Action.CopyToClipboard title="Copy Log Content" content={entry.content} />
               <Action.CopyToClipboard title="Copy Timestamp" content={entry.timestamp} />
               <Action title="Refresh" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />

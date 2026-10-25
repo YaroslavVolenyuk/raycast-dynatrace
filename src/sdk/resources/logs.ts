@@ -13,17 +13,22 @@
 
 import { z } from "zod";
 import type { TenantConfig } from "../auth";
-import { escapeDqlString } from "../grail";
 import type { DynatraceTransport } from "../transport";
 
 // ── 1. Raw API record schema ──────────────────────────────────────────────────
+// provenance: MCP execute_dql 2026-06-26 (fixture: sdk/resources/__fixtures__/logs.search.json)
+// - loglevel: required string, raw level from ingest (NONE|INFO|WARN|ERROR|SEVERE|CRITICAL|…)
+// - status:   normalized bucket Dynatrace computes (NONE|INFO|WARN|ERROR only) — use for
+//             filtering; confirmed present in every captured record alongside loglevel
+// - Extra Kubernetes / OpenPipeline fields (k8s.*, dt.openpipeline.*, dt.auth.origin)
+//   handled by .catchall — not enumerated to avoid schema rot as the field set grows
 
 export const logRecordSchema = z
   .object({
     timestamp: z.string(),
     content: z.string(),
-    loglevel: z.string(), // "DEBUG" | "INFO" | "WARN" | "ERROR" | "FATAL" | custom
-    status: z.string().optional(),
+    loglevel: z.string(), // raw level: NONE|INFO|WARN|ERROR|SEVERE|CRITICAL|ALERT|EMERGENCY|custom
+    status: z.string().optional(), // normalized bucket: NONE|INFO|WARN|ERROR (always present in practice)
 
     // Service / app
     "service.name": z.string().optional(),
@@ -83,54 +88,54 @@ export function normalizeLog(record: LogRecord): LogEntry {
 
 // ── 3. Query builder ──────────────────────────────────────────────────────────
 
-export type LogLevel = "error" | "warning" | "info" | "debug" | "fatal" | "all";
+// Dynatrace `status` field — 4 possible values that aggregate the detailed loglevel:
+//   ERROR  → SEVERE, ERROR, CRITICAL, ALERT, FATAL, EMERGENCY
+//   WARN   → WARN
+//   INFO   → INFO, DEBUG, NOTICE, TRACE
+//   NONE   → NONE
+export type LogLevel = "error" | "warn" | "info" | "none" | "all";
 
-export const LOG_PAGE_SIZE = 50;
+export const LOG_PAGE_SIZE = 100;
 
+// Maps UI filter values to Dynatrace `status` field values.
 const LOG_LEVEL_MAP: Record<LogLevel, string | null> = {
   error: "ERROR",
-  warning: "WARN",
+  warn: "WARN",
   info: "INFO",
-  debug: "DEBUG",
-  fatal: "FATAL",
+  none: "NONE",
   all: null, // no filter
 };
 
 export interface ListLogsOptions {
   level?: LogLevel;
   limit?: number;
-  /** Server-side filter by service.name (escaped). */
-  serviceName?: string;
-  /** Server-side full-text search in content (escaped). */
-  contentFilter?: string;
-  /** Cursor pagination: records with timestamp < before (ISO string). */
-  before?: string;
-  /** Raw DQL appended as-is — power-user escape hatch, NOT escaped. */
-  extraFilter?: string;
+  /**
+   * Relative timeframe string (e.g. "24h", "30m", "3d").
+   * Embedded directly into the DQL fetch clause as `from: now()-{value}`.
+   */
+  timeframeDql?: string;
+  /** Absolute ISO range used as API payload fallback. */
   timeframe?: { start: string; end: string };
   signal?: AbortSignal;
 }
 
 /** Builds the `fetch logs` DQL string for the given filters. */
 export function buildLogsQuery(opts: ListLogsOptions = {}): string {
-  const { level = "all", limit = LOG_PAGE_SIZE, serviceName, contentFilter, before, extraFilter } = opts;
-  const parts: string[] = ["fetch logs"];
+  const { level = "all", limit = LOG_PAGE_SIZE, timeframeDql, timeframe } = opts;
+
+  // Prefer relative DQL syntax (now()-Xh) so Grail always respects the window.
+  // Fall back to absolute ISO range, then plain fetch logs.
+  const fetchClause = timeframeDql
+    ? `fetch logs, from: now()-${timeframeDql}`
+    : timeframe
+      ? `fetch logs, from: "${timeframe.start}", to: "${timeframe.end}"`
+      : "fetch logs";
+
+  const parts: string[] = [fetchClause];
 
   const mapped = LOG_LEVEL_MAP[level] ?? null;
   if (mapped !== null) {
-    parts.push(`filter loglevel == "${mapped}"`);
-  }
-  if (serviceName) {
-    parts.push(`filter service.name == "${escapeDqlString(serviceName)}"`);
-  }
-  if (contentFilter) {
-    parts.push(`filter matchesPhrase(content, "${escapeDqlString(contentFilter)}")`);
-  }
-  if (before) {
-    parts.push(`filter timestamp < datetime("${before}")`);
-  }
-  if (extraFilter) {
-    parts.push(extraFilter.trim());
+    parts.push(`filter status == "${mapped}"`);
   }
   parts.push("sort timestamp desc");
   parts.push(`limit ${limit}`);
@@ -155,6 +160,7 @@ export async function listLogs(
     timeframe: opts.timeframe,
     signal: opts.signal,
     maxResultRecords: opts.limit ?? LOG_PAGE_SIZE,
+    requiredScopes: ["storage:logs:read"],
   });
 
   const entries: LogEntry[] = [];

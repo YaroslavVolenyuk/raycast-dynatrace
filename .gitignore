@@ -24,6 +24,9 @@ compiled_raycast_rust
 # Development mode icons (root level only — anchor prevents matching assets/)
 /dynatrace-icon*.png
 
+# Local review notes (internal, not part of the release)
+PUBLICATION_REVIEW.md
+
 # Environment variables (contains secrets — never commit)
 .env
 .env.local

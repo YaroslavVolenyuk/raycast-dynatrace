@@ -2,7 +2,7 @@
 // Pure async functions — never call showToast, never touch React state.
 // UI hooks wrap these for view-commands; background commands call them directly.
 
-import { ZodError, z } from "zod";
+import { ZodError } from "zod";
 import { getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
 import { grailResponseSchema } from "./schema";
 
@@ -13,9 +13,23 @@ export interface GrailQueryOptions {
   maxResultRecords?: number;
   /** Client-side fetch timeout in ms. Default 30 s (view), use 15 000 for background. */
   timeoutMs?: number;
+  /** Overall budget for polling a long-running query. Default 60 s. */
+  pollDeadlineMs?: number;
+  /** Scopes the calling resource needs; named in the 403 error message. */
+  requiredScopes?: readonly string[];
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+// ── Long-running query polling ────────────────────────────────────────────────
+// query:execute answers within requestTimeoutMilliseconds; if the query is
+// still RUNNING it returns a requestToken which must be polled via
+//   GET /platform/storage/query/v1/query:poll?request-token=<token>
+// (the token must be URL-encoded — it can contain '+', '=' etc.).
+// Each poll long-polls server-side via request-timeout-milliseconds; we keep
+// polling until SUCCEEDED/FAILED or the overall deadline expires.
+const POLL_REQUEST_TIMEOUT_MS = 5_000;
+const DEFAULT_POLL_DEADLINE_MS = 60_000;
 
 const BASE_PAYLOAD = {
   defaultSamplingRatio: 1,
@@ -114,7 +128,9 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
   }
   if (response.status === 403) {
     throw new Error(
-      "Access denied — OAuth client is missing required scopes (storage:*:read, entity:read). Check Manage Tenants.",
+      `Access denied — OAuth client is missing required scopes${
+        options.requiredScopes?.length ? ` (${options.requiredScopes.join(", ")})` : ""
+      }. Check Manage Tenants.`,
     );
   }
 
@@ -133,6 +149,32 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
     throw new Error(preview);
   }
 
+  let parsedResponse = parseGrailBody(rawText);
+
+  // Long-running query: poll query:poll with the request token until it
+  // finishes or the deadline expires.
+  const deadline = Date.now() + (options.pollDeadlineMs ?? DEFAULT_POLL_DEADLINE_MS);
+  while (parsedResponse.state !== "SUCCEEDED" && parsedResponse.state !== "FAILED") {
+    const token = parsedResponse.requestToken;
+    if (!token) {
+      throw new Error(`Query state is ${parsedResponse.state} but Dynatrace returned no request token to poll`);
+    }
+    if (Date.now() >= deadline) {
+      throw new Error("Query did not finish in time — narrow the timeframe or reduce data volume");
+    }
+    parsedResponse = await pollGrailQuery(tenant, token, userSignal, timeoutMs);
+  }
+
+  if (parsedResponse.state === "FAILED" || parsedResponse.error) {
+    const err = parsedResponse.error;
+    throw new Error(err ? `Dynatrace: ${err.message} (code ${err.code})` : "Dynatrace: query failed");
+  }
+
+  return (parsedResponse.result?.records ?? []) as T[];
+}
+
+/** Parses a Grail response body, rejecting HTML and unexpected shapes. */
+function parseGrailBody(rawText: string) {
   if (rawText.trimStart().startsWith("<")) {
     throw new Error(
       "Server returned an HTML page instead of JSON. " +
@@ -140,10 +182,8 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
         "Check your tenant configuration in Manage Tenants.",
     );
   }
-
-  let parsedResponse;
   try {
-    parsedResponse = grailResponseSchema.parse(JSON.parse(rawText));
+    return grailResponseSchema.parse(JSON.parse(rawText));
   } catch (zodErr) {
     if (zodErr instanceof ZodError) {
       throw new Error(
@@ -155,35 +195,56 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
     }
     throw zodErr;
   }
-
-  if (parsedResponse.state === "RUNNING") {
-    throw new Error("Query still running — narrow the timeframe or reduce data volume");
-  }
-
-  return (parsedResponse.result?.records ?? []) as T[];
 }
 
 /**
- * Like executeDqlQuery but validates each record against a Zod schema.
- * Records that fail validation are silently skipped; caller receives a count of skipped records.
- * Use this when you need strong typing on individual records and can tolerate partial results.
+ * One long-poll of a running query. The server holds the request open for up
+ * to POLL_REQUEST_TIMEOUT_MS and answers earlier if the query finishes.
  */
-export async function executeDqlQueryValidated<T>(
+async function pollGrailQuery(
   tenant: TenantConfig,
-  query: string,
-  schema: z.ZodType<T>,
-  options?: GrailQueryOptions,
-): Promise<{ records: T[]; skipped: number }> {
-  const raw = await executeDqlQuery<Record<string, unknown>>(tenant, query, options);
-  let skipped = 0;
-  const records: T[] = [];
-  for (const item of raw) {
-    const result = schema.safeParse(item);
-    if (result.success) {
-      records.push(result.data);
-    } else {
-      skipped++;
+  requestToken: string,
+  userSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<ReturnType<typeof parseGrailBody>> {
+  // getAccessToken serves from the in-memory cache; a token expiring mid-poll
+  // is refreshed transparently.
+  const accessToken = await getAccessToken(tenant);
+
+  const endpoint =
+    `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/query:poll` +
+    `?request-token=${encodeURIComponent(requestToken)}` +
+    `&request-timeout-milliseconds=${POLL_REQUEST_TIMEOUT_MS}`;
+
+  const timeoutCtrl = new AbortController();
+  const timeout = setTimeout(() => timeoutCtrl.abort(), timeoutMs);
+  const signal = userSignal ? combineSignals(userSignal, timeoutCtrl.signal) : timeoutCtrl.signal;
+
+  let response: Response;
+  let rawText: string;
+  try {
+    response = await fetch(endpoint, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+    });
+    rawText = await response.text();
+  } catch (fetchErr) {
+    if (fetchErr instanceof Error && fetchErr.name === "AbortError" && timeoutCtrl.signal.aborted) {
+      throw new Error(`Dynatrace is not responding (${Math.round(timeoutMs / 1000)}s timeout)`);
     }
+    throw fetchErr;
+  } finally {
+    clearTimeout(timeout);
   }
-  return { records, skipped };
+
+  if (response.status === 401) {
+    invalidateTokenCache(tenant.id);
+    throw new Error("Authentication failed while polling query results. Check credentials in Manage Tenants.");
+  }
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} while polling query results: ${rawText.slice(0, 300)}`);
+  }
+
+  return parseGrailBody(rawText);
 }

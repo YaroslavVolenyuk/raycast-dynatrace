@@ -1,10 +1,9 @@
-// Tests for executeDqlQuery and executeDqlQueryValidated in src/sdk/grail/query.ts.
+// Tests for executeDqlQuery in src/sdk/grail/query.ts.
 //
 // Strategy: mock fetch globally and mock ../../auth so we can control token
 // responses. OAuthError is kept real (via requireActual) because query.ts checks
 // `instanceof OAuthError`.
 
-import { z } from "zod";
 import type { TenantConfig } from "../../auth";
 
 jest.mock("../../auth", () => {
@@ -16,7 +15,7 @@ jest.mock("../../auth", () => {
   };
 });
 
-import { executeDqlQuery, executeDqlQueryValidated } from "../query";
+import { executeDqlQuery } from "../query";
 import { getAccessToken, invalidateTokenCache, OAuthError } from "../../auth";
 
 const mockGetAccessToken = getAccessToken as jest.MockedFunction<typeof getAccessToken>;
@@ -130,6 +129,14 @@ describe("HTTP error responses", () => {
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("missing required scopes");
   });
 
+  it("names the caller's required scopes in the 403 message", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403, text: async () => "forbidden" });
+
+    await expect(executeDqlQuery(TENANT, "fetch logs", { requiredScopes: ["storage:logs:read"] })).rejects.toThrow(
+      "(storage:logs:read)",
+    );
+  });
+
   it("uses error.message from JSON body on non-ok", async () => {
     const body = { error: { code: 400, message: "Invalid DQL syntax at position 5" } };
     mockFetch.mockResolvedValueOnce(grailError(400, body));
@@ -161,10 +168,20 @@ describe("response body errors", () => {
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTML page instead of JSON");
   });
 
-  it("throws when query state is RUNNING", async () => {
+  it("throws when state is RUNNING but no requestToken is returned", async () => {
     mockFetch.mockResolvedValueOnce(grailOk([], "RUNNING"));
 
-    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("still running");
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("no request token");
+  });
+
+  it("throws with the Grail error message when state is FAILED", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ state: "FAILED", error: { code: 400, message: "bad query" } }),
+    });
+
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("bad query");
   });
 
   it("throws with field names on Zod schema mismatch", async () => {
@@ -175,6 +192,48 @@ describe("response body errors", () => {
     });
 
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("Unexpected Grail response format");
+  });
+});
+
+describe("long-running query polling", () => {
+  function grailRunning(token: string) {
+    return {
+      ok: true,
+      status: 202,
+      text: async () => JSON.stringify({ state: "RUNNING", requestToken: token, progress: 10 }),
+    };
+  }
+
+  it("polls query:poll with the URL-encoded request token until SUCCEEDED", async () => {
+    const records = [{ content: "late result" }];
+    mockFetch
+      .mockResolvedValueOnce(grailRunning("tok+en=")) // execute → RUNNING
+      .mockResolvedValueOnce(grailRunning("tok+en=")) // poll 1 → still RUNNING
+      .mockResolvedValueOnce(grailOk(records)); // poll 2 → SUCCEEDED
+
+    const result = await executeDqlQuery(TENANT, "fetch logs");
+    expect(result).toEqual(records);
+
+    const pollUrl = mockFetch.mock.calls[1][0] as string;
+    expect(pollUrl).toContain("/platform/storage/query/v1/query:poll");
+    expect(pollUrl).toContain(`request-token=${encodeURIComponent("tok+en=")}`);
+    expect(mockFetch.mock.calls[1][1]).toMatchObject({ method: "GET" });
+  });
+
+  it("gives up when the poll deadline expires", async () => {
+    mockFetch.mockResolvedValue(grailRunning("tok"));
+
+    await expect(executeDqlQuery(TENANT, "fetch logs", { pollDeadlineMs: 0 })).rejects.toThrow(
+      "did not finish in time",
+    );
+  });
+
+  it("surfaces poll HTTP errors with status", async () => {
+    mockFetch
+      .mockResolvedValueOnce(grailRunning("tok"))
+      .mockResolvedValueOnce({ ok: false, status: 410, text: async () => "gone" });
+
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 410 while polling");
   });
 });
 
@@ -220,39 +279,5 @@ describe("timeout and abort", () => {
     await expect(
       executeDqlQuery(TENANT, "fetch logs", { signal: userCtrl.signal, timeoutMs: 30_000 }),
     ).rejects.toMatchObject({ name: "AbortError" });
-  });
-});
-
-describe("executeDqlQueryValidated", () => {
-  const schema = z.object({ id: z.string(), value: z.number() });
-
-  it("returns all records when all pass validation", async () => {
-    mockFetch.mockResolvedValueOnce(grailOk([{ id: "r1", value: 42 }]));
-
-    const { records, skipped } = await executeDqlQueryValidated(TENANT, "fetch logs", schema);
-    expect(records).toEqual([{ id: "r1", value: 42 }]);
-    expect(skipped).toBe(0);
-  });
-
-  it("skips records that fail schema and counts them", async () => {
-    mockFetch.mockResolvedValueOnce(
-      grailOk([
-        { id: "r1", value: 1 },
-        { id: "r2", value: "bad" },
-        { id: "r3", value: 3 },
-      ]),
-    );
-
-    const { records, skipped } = await executeDqlQueryValidated(TENANT, "fetch logs", schema);
-    expect(records).toHaveLength(2);
-    expect(skipped).toBe(1);
-  });
-
-  it("returns empty result with zero skipped for empty response", async () => {
-    mockFetch.mockResolvedValueOnce(grailOk([]));
-
-    const { records, skipped } = await executeDqlQueryValidated(TENANT, "fetch logs", schema);
-    expect(records).toEqual([]);
-    expect(skipped).toBe(0);
   });
 });

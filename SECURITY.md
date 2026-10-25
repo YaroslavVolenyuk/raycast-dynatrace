@@ -26,13 +26,13 @@ version receives security fixes.
 
 ## Handling secrets
 
-This extension handles OAuth credentials, Jira API tokens, and Dynatrace tenant
+This extension handles OAuth client credentials and Dynatrace tenant
 secrets. When reporting or contributing:
 
 - **Never** include real tokens, client secrets, or `.env` contents in issues,
   pull requests, logs, or test fixtures.
-- Secrets are stored in Raycast's secure preferences and local encrypted storage;
-  they must never be logged or written to disk in plaintext.
+- Secrets are stored in Raycast's encrypted local storage, on this machine only;
+  they must never be logged or written elsewhere.
 - CI runs [gitleaks](https://github.com/gitleaks/gitleaks) on every push and pull
   request to catch accidentally committed credentials.
 

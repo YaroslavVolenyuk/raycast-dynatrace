@@ -16,8 +16,6 @@ export const LocalStorage = {
   _clear: () => _localStorageMap.clear(),
 };
 
-export const getPreferenceValues = jest.fn(() => ({}));
-export const openExtensionPreferences = jest.fn();
 export const showToast = jest.fn();
 
 export const Toast = {

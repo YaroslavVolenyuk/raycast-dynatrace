@@ -12,11 +12,9 @@ const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValue
   name: "Production",
   tenantEndpoint: "https://abc12345.apps.dynatrace.com",
   clientId: "dt0s02.ABC",
-  clientSecret: "dt0s02.ABC.SECRET",
+  clientSecret: "dt0s02.ABC.dummySecretValueNotReal",
   ssoEndpoint: DEFAULT_SSO_ENDPOINT,
   scopes: READ_ONLY_SCOPES.join("\n"),
-  accountUrn: "",
-  useClassicProxy: true,
   ...overrides,
 });
 
@@ -85,7 +83,20 @@ describe("buildTenantConfig", () => {
     expect(buildTenantConfig(validValues()).id).not.toBe(buildTenantConfig(validValues()).id);
   });
 
-  it("omits an empty accountUrn", () => {
-    expect(buildTenantConfig(validValues({ accountUrn: "  " })).accountUrn).toBeUndefined();
+  it("falls back to the prod SSO for blank SSO on a prod tenant", () => {
+    const cfg = buildTenantConfig(
+      validValues({ ssoEndpoint: "", tenantEndpoint: "https://abc12345.apps.dynatrace.com" }),
+    );
+    expect(cfg.ssoEndpoint).toBe("https://sso.dynatrace.com/sso/oauth2/token");
+  });
+
+  it("does not misread 'dev' outside a domain label as a dev environment", () => {
+    const cfg = buildTenantConfig(validValues({ ssoEndpoint: "", tenantEndpoint: "https://devcorp.example.com" }));
+    expect(cfg.ssoEndpoint).toBe("https://sso.dynatrace.com/sso/oauth2/token");
+  });
+
+  it("keeps an explicit SSO override", () => {
+    const cfg = buildTenantConfig(validValues({ ssoEndpoint: "https://custom.sso.example.com/token" }));
+    expect(cfg.ssoEndpoint).toBe("https://custom.sso.example.com/token");
   });
 });

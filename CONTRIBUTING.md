@@ -22,7 +22,9 @@ Common commands:
 npm run lint        # eslint, including the layer-boundary rules
 npm run typecheck   # tsc --noEmit
 npm test            # jest
-npm run dev         # ray develop (available once commands land in Phase 1)
+npm run dev         # ray develop
+npm run build       # ray build
+npm run knip        # unused files/exports/dependencies
 ```
 
 ## Architecture & boundaries

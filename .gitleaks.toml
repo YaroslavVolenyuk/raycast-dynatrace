@@ -1,0 +1,11 @@
+title = "gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Test fixtures contain placeholder/sanitized values, not real secrets"
+paths = [
+  '''.*__fixtures__/.*''',
+  '''.*__tests__/.*''',
+]

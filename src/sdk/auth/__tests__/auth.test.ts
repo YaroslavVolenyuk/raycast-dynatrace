@@ -76,12 +76,28 @@ test("invalidateTokenCache forces a refetch on next call", async () => {
   expect(mockFetch).toHaveBeenCalledTimes(2);
 });
 
-test("validateTenantCredentials maps 401 to a friendly error", async () => {
+test("validateTenantCredentials surfaces the SSO error reason (401)", async () => {
   mockErrorResponse(401, '{"error":"unauthorized"}');
   const { validateTenantCredentials } = await loadAuth();
   const result = await validateTenantCredentials(TENANT);
   expect(result.valid).toBe(false);
-  expect(result.valid === false && result.error).toMatch(/Unauthorized/);
+  expect(result.valid === false && result.error).toMatch(/unauthorized/i);
+});
+
+test("validateTenantCredentials hints at scopes on invalid_scope (400)", async () => {
+  mockErrorResponse(400, '{"error":"invalid_scope","error_description":"scope storage:foo:read not allowed"}');
+  const { validateTenantCredentials } = await loadAuth();
+  const result = await validateTenantCredentials(TENANT);
+  expect(result.valid === false && result.error).toMatch(/invalid_scope/);
+  expect(result.valid === false && result.error).toMatch(/scopes are not granted/);
+});
+
+test("validateTenantCredentials hints at credentials on invalid_client (400)", async () => {
+  mockErrorResponse(400, '{"error":"invalid_client"}');
+  const { validateTenantCredentials } = await loadAuth();
+  const result = await validateTenantCredentials(TENANT);
+  expect(result.valid === false && result.error).toMatch(/invalid_client/);
+  expect(result.valid === false && result.error).toMatch(/Client ID and Secret/);
 });
 
 describe("OAuthError — secret redaction", () => {

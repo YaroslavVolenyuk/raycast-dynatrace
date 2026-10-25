@@ -2,7 +2,18 @@
 // Dynatrace tenants and lets the user add, edit, switch, test and remove them.
 // Every other command resolves its tenant from what is configured here.
 
-import { List, ActionPanel, Action, Icon, Color, Alert, confirmAlert, showToast, Toast, useNavigation } from "@raycast/api";
+import {
+  List,
+  ActionPanel,
+  Action,
+  Icon,
+  Color,
+  Alert,
+  confirmAlert,
+  showToast,
+  Toast,
+  useNavigation,
+} from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
 import { validateTenantCredentials } from "../../../sdk/auth";
@@ -64,11 +75,7 @@ export default function ManageTenants() {
         description="Add a Dynatrace environment to start querying live data."
         actions={
           <ActionPanel>
-            <Action
-              title="Add Tenant"
-              icon={Icon.Plus}
-              onAction={() => push(<TenantForm onSaved={revalidate} />)}
-            />
+            <Action title="Add Tenant" icon={Icon.Plus} onAction={() => push(<TenantForm onSaved={revalidate} />)} />
           </ActionPanel>
         }
       />

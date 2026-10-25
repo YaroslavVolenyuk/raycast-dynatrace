@@ -3,36 +3,24 @@
 // without rendering Raycast components.
 
 import type { TenantConfig } from "../../../sdk/auth";
-
-/** Dynatrace SSO token endpoint — same for every SaaS tenant. */
-export const DEFAULT_SSO_ENDPOINT = "https://sso.dynatrace.com/sso/oauth2/token";
+import { PROD_SSO_ENDPOINT } from "../../../sdk/auth";
 
 /**
- * Least-privilege, read-only Grail/platform scopes that cover the commands this
- * extension ships today (logs + future problems/entities/spans/events). Users
- * can trim or extend these in the form; this is the default a new tenant gets.
+ * Dynatrace SSO token endpoint for production SaaS environments. Used when the
+ * SSO field is blank; other environments set it manually in the form.
  */
-export const READ_ONLY_SCOPES = [
-  "storage:logs:read",
-  "storage:problems:read",
-  "storage:events:read",
-  "storage:entities:read",
-  "storage:spans:read",
-  "storage:metrics:read",
-  "storage:bizevents:read",
-  "storage:buckets:read",
-] as const;
+export const DEFAULT_SSO_ENDPOINT = PROD_SSO_ENDPOINT;
 
 /**
- * Write scopes — opt-in only. Not part of the default tenant; surfaced for the
- * future Read-only/Operate safety model (plan §Phase 3) where mutating commands
- * (workflow execute, settings write) require explicit elevation.
+ * Least-privilege, read-only scope set. Only includes scopes for commands that
+ * have been migrated into this extension. Add a scope here only when the
+ * corresponding command ships.
+ *
+ * Current commands:
+ *   - dt-search-logs   → storage:logs:read  (verified live 2026-06-26)
+ *   - dt-search-traces → storage:spans:read
  */
-export const WRITE_SCOPES = [
-  "automation:workflows:write",
-  "automation:workflows:run",
-  "settings:objects:write",
-] as const;
+export const READ_ONLY_SCOPES = ["storage:logs:read", "storage:spans:read"] as const;
 
 /** Raw values straight off the Raycast <Form>. All strings (checkbox aside). */
 export interface TenantFormValues {
@@ -42,8 +30,6 @@ export interface TenantFormValues {
   clientSecret: string;
   ssoEndpoint: string;
   scopes: string;
-  accountUrn: string;
-  useClassicProxy: boolean;
 }
 
 /**
@@ -87,9 +73,10 @@ export function validateForm(values: TenantFormValues): Partial<Record<keyof Ten
   if (!values.clientId.trim()) errors.clientId = "Client ID is required";
   if (!values.clientSecret.trim()) errors.clientSecret = "Client Secret is required";
 
+  // SSO endpoint is optional — left blank it falls back to the prod default.
+  // Only validate an explicit override.
   const sso = normalizeUrl(values.ssoEndpoint);
-  if (!sso) errors.ssoEndpoint = "SSO endpoint is required";
-  else if (!isHttpsUrl(sso)) errors.ssoEndpoint = "Must be a valid https:// URL";
+  if (sso && !isHttpsUrl(sso)) errors.ssoEndpoint = "Must be a valid https:// URL";
 
   if (parseScopes(values.scopes).length === 0) errors.scopes = "At least one scope is required";
 
@@ -102,16 +89,15 @@ export function validateForm(values: TenantFormValues): Partial<Record<keyof Ten
  * fresh id is generated.
  */
 export function buildTenantConfig(values: TenantFormValues, existingId?: string): TenantConfig {
+  const tenantEndpoint = normalizeUrl(values.tenantEndpoint);
   return {
     id: existingId ?? generateTenantId(),
     name: values.name.trim(),
-    tenantEndpoint: normalizeUrl(values.tenantEndpoint),
+    tenantEndpoint,
     clientId: values.clientId.trim(),
     clientSecret: values.clientSecret.trim(),
     ssoEndpoint: normalizeUrl(values.ssoEndpoint) || DEFAULT_SSO_ENDPOINT,
     scopes: parseScopes(values.scopes),
-    accountUrn: values.accountUrn.trim() || undefined,
-    useClassicProxy: values.useClassicProxy,
   };
 }
 

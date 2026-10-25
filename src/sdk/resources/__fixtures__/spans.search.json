@@ -1,0 +1,62 @@
+{
+  "_provenance": "Illustrative records whose SHAPE was verified against live Grail `fetch spans` (dev tenant, MCP execute_dql 2026-07-01; field names re-verified against dt.semantic_dictionary.fields 2026-07-18). Values are synthetic; the field names, types and encodings are real: Grail returns numeric fields as STRINGS — duration in NANOSECONDS (e.g. \"501388500\"), http.response.status_code and server.port as strings — and span.status_code lower-case (\"ok\"|\"error\"|\"unset\"). Root spans are identified by the ABSENCE of span.parent_id. Replace with a sanitized real capture once representative spans exist.",
+  "records": [
+    {
+      "trace.id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "span.id": "00f067aa0ba902b7",
+      "span.kind": "server",
+      "span.name": "GET /api/users",
+      "span.status_code": "ok",
+      "start_time": "2026-06-25T17:10:00.000000000Z",
+      "end_time": "2026-06-25T17:10:00.182000000Z",
+      "duration": "182000000",
+      "service.name": "user-service",
+      "dt.entity.service": "SERVICE-A1B2C3D4E5F60001",
+      "endpoint.name": "GET /api/users",
+      "http.request.method": "GET",
+      "http.response.status_code": "200",
+      "url.path": "/api/users",
+      "http.route": "/api/users",
+      "server.address": "user-service.prod.svc",
+      "server.port": "8080"
+    },
+    {
+      "trace.id": "4bf92f3577b34da6a3ce929d0e0e4736",
+      "span.id": "a3ce929d0e0e4737",
+      "span.parent_id": "00f067aa0ba902b7",
+      "span.kind": "client",
+      "span.name": "GET /internal/permissions",
+      "span.status_code": "ok",
+      "start_time": "2026-06-25T17:10:00.021000000Z",
+      "end_time": "2026-06-25T17:10:00.073000000Z",
+      "duration": "52000000",
+      "service.name": "user-service",
+      "dt.entity.service": "SERVICE-A1B2C3D4E5F60001",
+      "http.request.method": "GET",
+      "http.response.status_code": "200",
+      "url.path": "/internal/permissions",
+      "server.address": "auth-service.prod.svc",
+      "server.port": "8080"
+    },
+    {
+      "trace.id": "9d8f2b1c4e7a0536b2d1c8e9f0a3b4c5",
+      "span.id": "b2d1c8e9f0a3b4c6",
+      "span.parent_id": "c5e2d9f0a1b3c4d7",
+      "span.kind": "client",
+      "span.name": "SELECT users",
+      "span.status_code": "error",
+      "span.status_message": "connection timeout after 5000ms",
+      "start_time": "2026-06-25T17:08:44.000000000Z",
+      "end_time": "2026-06-25T17:08:49.001000000Z",
+      "duration": "5001000000",
+      "service.name": "order-service",
+      "dt.entity.service": "SERVICE-B2C3D4E5F6A70002",
+      "db.system": "postgresql",
+      "db.operation.name": "SELECT",
+      "db.namespace": "orders_db",
+      "db.collection.name": "users",
+      "server.address": "postgres.prod.svc",
+      "server.port": "5432"
+    }
+  ]
+}

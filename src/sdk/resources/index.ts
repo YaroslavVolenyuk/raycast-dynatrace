@@ -17,3 +17,16 @@ export {
   type LogLevel,
   type ListLogsOptions,
 } from "./logs";
+
+export {
+  spanRecordSchema,
+  normalizeSpan,
+  buildSpansQuery,
+  listSpans,
+  formatDuration,
+  SPAN_PAGE_SIZE,
+  type SpanRecord,
+  type SpanEntry,
+  type SpanStatus,
+  type ListSpansOptions,
+} from "./spans";

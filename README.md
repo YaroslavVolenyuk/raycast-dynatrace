@@ -1,35 +1,84 @@
-# Dynatrace Connector for Raycast
+# Dynatrace
 
-Monitor your Dynatrace environment directly from Raycast — logs, problems, DQL,
-deployments and entities, without leaving your keyboard.
+Dynatrace brings your Dynatrace environment into Raycast: manage multiple
+tenants, search Grail logs with DQL, and browse distributed traces, all
+without leaving your keyboard.
 
-> **Status: Phase 0 — foundation.** This repository is a ground-up rewrite of the
-> original prototype, rebuilt to dynatrace-oss engineering standards. This commit
-> establishes the layered architecture, tooling and CI gates. Commands are ported
-> in Phase 1 (see the rewrite plan).
+This is an independent, community-built extension. It is not an official
+Dynatrace product and is not affiliated with or endorsed by Dynatrace LLC.
+
+## Commands
+
+### Manage Tenants
+
+Add, edit, test, and switch between multiple Dynatrace tenants. Each tenant
+is defined by its environment URL and an OAuth client (client ID and
+secret). Use this command to verify a tenant's credentials before relying on
+it, and to switch the active tenant used by the other commands.
+
+### Search Logs
+
+Search Grail logs using DQL. Filter by:
+
+- timeframe presets from 15 minutes to 7 days
+- status level: error, warn, info, or none
+- result limit: 50 to 500
+
+Selecting a log entry opens a detail view with its fields rendered as
+markdown, plus a deep link that opens the matching log in the Dynatrace
+web UI.
+
+### Search Traces
+
+Search Grail spans. Filter by timeframe, span status, or trace ID. Selecting
+a span opens a detail view, with a deep link into the Dynatrace Distributed
+Tracing explorer for the corresponding trace.
+
+## Setup
+
+1. In Dynatrace, go to **Account Management → Identity & access management →
+   OAuth clients** and create a new OAuth client.
+2. Grant the client these scopes:
+   - `storage:logs:read` (required for Search Logs)
+   - `storage:spans:read` (required for Search Traces)
+3. In Raycast, run **Manage Tenants** and add a tenant. The scope fields are
+   pre-filled with the two scopes above. You'll need:
+   - the environment URL, in the form `https://<environment-id>.apps.dynatrace.com`
+   - the OAuth client ID and client secret from step 1
+4. Use **Test** in Manage Tenants to confirm the credentials work before
+   using Search Logs or Search Traces.
+
+If you work with more than one Dynatrace environment, add each as a
+separate tenant and switch the active tenant from the Manage Tenants
+command at any time.
+
+Authentication uses OAuth 2.0 client-credentials against Dynatrace SSO. The
+SSO endpoint defaults to `sso.dynatrace.com` and can be overridden per tenant
+(advanced). Long-running
+Grail queries are polled automatically via the `query:poll` API, so results
+appear once the query completes without any extra action.
+
+## Security
+
+Tenant configuration, including the OAuth client secret, is stored in
+Raycast's LocalStorage, which is Raycast's encrypted local database. It stays
+on this machine and is not synced anywhere. Access tokens obtained from Dynatrace SSO are held in
+memory only for the lifetime of the Raycast process and are never
+persisted.
 
 ## Architecture
 
-The codebase is split into three layers with a hard, lint-enforced boundary:
+The codebase is split into three layers with a hard, lint-enforced
+boundary:
 
-```
-src/
-├── sdk/        Layer 1 — standalone Dynatrace client (no Raycast, no React)
-│   ├── auth/        OAuth client-credentials, token cache, TenantConfig
-│   ├── http/        single transport: timeout, 401-retry, pagination, errors
-│   ├── grail/       DQL execution, query builders
-│   └── resources/   one module per resource (endpoints + zod schemas + normalizers)
-├── services/   Layer 2 — application logic (no fetch, no JSX)
-├── ui/         Layer 3 — Raycast presentation (thin: hooks + rendering)
-└── mocks/      fixtures-derived mock data + mock transport
-```
+- `src/sdk` — a standalone Dynatrace client: OAuth authentication, Grail DQL
+  execution, and resource modules with Zod schemas. It has no
+  Raycast or React imports.
+- `src/services` — application logic. No `fetch` calls, no JSX.
+- `src/ui` — Raycast presentation: commands, hooks, and rendering.
 
-Rules that make the boundary real (enforced by ESLint `no-restricted-imports`
-and a CI grep):
-
-- `src/sdk` imports nothing from `@raycast/api`, `@raycast/utils`, or `react`.
-- No layer imports a layer above it (`sdk` ✗→ `services`/`ui`; `services` ✗→ `ui`).
-- All network calls live in `src/sdk/http`.
+The boundary is enforced by an ESLint `no-restricted-imports` rule and a CI
+grep, so a PR that crosses layers fails automatically.
 
 ## Development
 
@@ -37,17 +86,26 @@ Requires Node 22 or newer.
 
 ```bash
 npm install
-npm run lint        # eslint (incl. layer boundary rules)
+npm run dev         # ray develop
+npm run build       # ray build
+npm run lint        # eslint, including the layer-boundary rules
 npm run typecheck   # tsc --noEmit
 npm test            # jest
+npm run knip        # unused files/exports/dependencies
 ```
 
-`npm run dev` / `npm run build` (Raycast CLI) become active in Phase 1, once
-commands are added to the manifest.
+To send a sample trace to a tenant for manual testing of Search Traces, set
+`DT_TENANT_URL` and `DT_API_TOKEN` (a token with the
+`openTelemetryTrace.ingest` scope) in a local `.env` file (gitignored), then
+run:
+
+```bash
+node --env-file=.env scripts/ingest-test-spans.mjs
+```
 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
 
-This is an independent, community-built extension and is not an official
-Dynatrace product.
+Dynatrace is a trademark of Dynatrace LLC. This project is not affiliated
+with, endorsed by, or sponsored by Dynatrace LLC.

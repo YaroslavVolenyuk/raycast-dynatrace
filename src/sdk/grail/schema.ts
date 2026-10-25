@@ -23,5 +23,3 @@ export const grailResponseSchema = z.object({
     .optional(),
   requestToken: z.string().optional(),
 });
-
-export type GrailResponse = z.infer<typeof grailResponseSchema>;

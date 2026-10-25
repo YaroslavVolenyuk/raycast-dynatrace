@@ -1,4 +1,4 @@
-import { formatLogContent, extractErrorMessage } from "../formatLogContent";
+import { formatLogContent } from "../formatLogContent";
 
 describe("formatLogContent", () => {
   it("returns null/empty unchanged", () => {
@@ -23,16 +23,5 @@ describe("formatLogContent", () => {
     const out = formatLogContent("text with ``` inside")!;
     // opening fence must be at least 4 backticks so the inner ``` cannot close it
     expect(out).toMatch(/^````+/);
-  });
-});
-
-describe("extractErrorMessage", () => {
-  it("returns the first error line", () => {
-    const msg = extractErrorMessage("Exception: boom\n  at x");
-    expect(msg).toBe("Exception: boom");
-  });
-
-  it("returns null when no error line is present", () => {
-    expect(extractErrorMessage("just a log line")).toBeNull();
   });
 });

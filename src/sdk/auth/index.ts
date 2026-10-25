@@ -14,15 +14,33 @@ export interface TenantConfig {
   tenantEndpoint: string; // e.g. https://abc123.live.dynatrace.com
   clientId: string;
   clientSecret: string;
-  ssoEndpoint: string; // default: https://sso.dynatrace.com/sso/oauth2/token
-  scopes: string[]; // e.g. ["storage:logs:read", "storage:problems:read"]
-  accountUrn?: string; // urn:dtaccount:<uuid> for account-level clients
-  useClassicProxy?: boolean; // default true; set false if /platform/classic/ returns 404
+  ssoEndpoint: string; // default: derived from tenantEndpoint (prod/dev/sprint SSO)
+  scopes: string[]; // e.g. ["storage:logs:read", "storage:spans:read"]
 }
 
 interface CachedToken {
   access_token: string;
   exp: number; // Date.now() + expires_in * 1000
+}
+
+// ── SSO endpoint ──────────────────────────────────────────────────────────────
+// SaaS prod environments use https://sso.dynatrace.com/sso/oauth2/token.
+// Other environments can set a custom SSO endpoint per tenant ("SSO endpoint
+// (advanced)" in Manage Tenants).
+
+export const PROD_SSO_ENDPOINT = "https://sso.dynatrace.com/sso/oauth2/token";
+
+/** Extracts a human-readable reason from an OAuth error body (JSON or form). */
+function describeOAuthBody(body: string): string | null {
+  try {
+    const json = JSON.parse(body) as { error?: string; error_description?: string };
+    const parts = [json.error, json.error_description].filter(Boolean);
+    if (parts.length) return parts.join(": ");
+  } catch {
+    // not JSON — fall through
+  }
+  const trimmed = body.trim();
+  return trimmed ? trimmed.slice(0, 200) : null;
 }
 
 // ── Error class ───────────────────────────────────────────────────────────────
@@ -70,10 +88,6 @@ export async function getAccessToken(tenant: TenantConfig): Promise<string> {
     client_secret: tenant.clientSecret,
     scope: scopeString,
   });
-
-  if (tenant.accountUrn) {
-    params.set("resource", tenant.accountUrn);
-  }
 
   const ssoTimeout = new AbortController();
   const ssoTimer = setTimeout(() => ssoTimeout.abort(), 15_000);
@@ -141,16 +155,24 @@ export async function validateTenantCredentials(
     return { valid: true };
   } catch (err) {
     if (err instanceof OAuthError) {
-      if (err.statusCode === 400) {
-        return { valid: false, error: "Invalid Client ID or Secret — check Dynatrace OAuth app settings" };
-      }
-      if (err.statusCode === 401) {
-        return { valid: false, error: "Unauthorized — Client ID or Secret is incorrect" };
+      const detail = describeOAuthBody(err.body);
+      // Surface the SSO's own reason — distinguishes invalid_client (bad
+      // ID/Secret) from invalid_scope (a scope the OAuth client isn't granted).
+      if (err.statusCode === 400 || err.statusCode === 401) {
+        const hint =
+          detail?.includes("invalid_scope") === true
+            ? " — one or more scopes are not granted to this OAuth client; remove the unsupported scopes"
+            : detail?.includes("invalid_client") === true
+              ? " — check the Client ID and Secret"
+              : detail?.includes("invalid_request") === true
+                ? " — malformed token request; check Client ID, Secret, and SSO endpoint"
+                : "";
+        return { valid: false, error: `${detail ?? "Invalid client credentials"}${hint}` };
       }
       if (err.statusCode === 403) {
-        return { valid: false, error: "Forbidden — check scopes and permissions" };
+        return { valid: false, error: detail ? `Forbidden: ${detail}` : "Forbidden — check scopes and permissions" };
       }
-      return { valid: false, error: `OAuth error ${err.statusCode}` };
+      return { valid: false, error: detail ? `OAuth ${err.statusCode}: ${detail}` : `OAuth error ${err.statusCode}` };
     }
     if (err instanceof TypeError && err.message.includes("fetch")) {
       return { valid: false, error: "Cannot reach SSO endpoint — check URL and network" };

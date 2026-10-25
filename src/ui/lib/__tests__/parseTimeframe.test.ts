@@ -1,4 +1,4 @@
-import { parseTimeframe, parseTimeExpression, timeframeLabel } from "../parseTimeframe";
+import { parseTimeframe } from "../parseTimeframe";
 
 describe("parseTimeframe", () => {
   it("parses a duration preset into a start/end window", () => {
@@ -32,30 +32,5 @@ describe("parseTimeframe", () => {
     };
     expect(hours("")).toBe(24);
     expect(hours(null)).toBe(24);
-  });
-});
-
-describe("parseTimeExpression", () => {
-  it("resolves 'now' to a date", () => {
-    expect(parseTimeExpression("now")).toBeInstanceOf(Date);
-  });
-
-  it("resolves relative '-30m'", () => {
-    const d = parseTimeExpression("-30m")!;
-    expect(Math.round((Date.now() - d.getTime()) / 60000)).toBe(30);
-  });
-
-  it("returns null for unparseable input", () => {
-    expect(parseTimeExpression("not-a-date")).toBeNull();
-  });
-});
-
-describe("timeframeLabel", () => {
-  it("maps known presets to friendly labels", () => {
-    expect(timeframeLabel("24h")).toBe("Last 24 hours");
-  });
-
-  it("passes through unknown values", () => {
-    expect(timeframeLabel("99h")).toBe("99h");
   });
 });

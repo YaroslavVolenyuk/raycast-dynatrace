@@ -1,37 +1,47 @@
-[
-  {
-    "timestamp": "2026-06-24T10:58:00.000Z",
-    "loglevel": "ERROR",
-    "content": "NullPointerException in PaymentService.processTransaction() at line 142",
-    "log.source": "/var/log/payment-service/app.log",
-    "service.name": "payment-service",
-    "dt.entity.host": "HOST-abc123",
-    "status": "ERROR"
-  },
-  {
-    "timestamp": "2026-06-24T10:55:00.000Z",
-    "loglevel": "ERROR",
-    "content": "Failed to connect to database: Connection refused (host=db-primary:5432, retries=3)",
-    "log.source": "/var/log/order-service/app.log",
-    "service.name": "order-service",
-    "dt.entity.host": "HOST-def456",
-    "status": "ERROR"
-  },
-  {
-    "timestamp": "2026-06-24T10:48:00.000Z",
-    "loglevel": "WARN",
-    "content": "Response time exceeded threshold: 3200ms (threshold=2000ms) for GET /api/v2/products",
-    "log.source": "/var/log/api-gateway/access.log",
-    "service.name": "api-gateway",
-    "host.name": "gateway-node-01",
-    "status": "SLOW"
-  },
-  {
-    "timestamp": "2026-06-24T10:40:00.000Z",
-    "loglevel": "INFO",
-    "content": "Deployment completed successfully: order-service v2.4.1 to v2.4.2 (canary: 10%)",
-    "log.source": "/var/log/deploy-agent/events.log",
-    "service.name": "deploy-agent",
-    "status": "OK"
-  }
-]
+{
+  "_provenance": "Captured from live Dynatrace tenant via MCP execute_dql 2026-06-26. Query: `fetch logs, from: now()-30d | sort timestamp desc | limit 3` + `fetch logs, from: now()-30d | filter status == \"ERROR\" | limit 2`. loglevel confirmed required (present in every record). status confirmed always present alongside loglevel. dt.openpipeline.pipelines confirmed as string[] array. dt.auth.origin sanitized.",
+  "records": [
+    {
+      "timestamp": "2026-06-25T17:06:11.000000000Z",
+      "content": "2026-06-25 17:06:11 UTC [abc12345, 6, EntityQueryLogUtil] HANDLE REQUEST> queryId=f8e3b210-c94a-4d71-a562-17b8f203c6d9",
+      "loglevel": "NONE",
+      "status": "NONE",
+      "service.name": "entity-query-engine",
+      "host.name": "srv-prod-query-02",
+      "k8s.cluster.name": "cluster-production-alpha",
+      "k8s.namespace.name": "query-engine",
+      "dt.process.name": "Entity Query Engine",
+      "dt.auth.origin": "dt0c01.SANITIZED",
+      "dt.openpipeline.pipelines": ["logs:default"],
+      "dt.openpipeline.source": "/api/v2/logs/ingest"
+    },
+    {
+      "timestamp": "2026-06-25T17:06:11.000000000Z",
+      "content": "2026-06-25 17:06:11 UTC [abc12345, 6, EntityQueryLogUtil] query_id=f8e3b210-c94a-4d71-a562-17b8f203c6d9 duration=23ms rows=142 cache_hit=false",
+      "loglevel": "NONE",
+      "status": "NONE",
+      "service.name": "entity-query-engine",
+      "host.name": "srv-prod-query-02",
+      "k8s.cluster.name": "cluster-production-alpha",
+      "k8s.namespace.name": "query-engine",
+      "dt.process.name": "Entity Query Engine",
+      "dt.auth.origin": "dt0c01.SANITIZED",
+      "dt.openpipeline.pipelines": ["logs:default"],
+      "dt.openpipeline.source": "/api/v2/logs/ingest"
+    },
+    {
+      "timestamp": "2026-06-25T17:05:06.361000000Z",
+      "content": "The response of the called function exceeded the size-limit of 6291456 bytes",
+      "loglevel": "ERROR",
+      "status": "ERROR",
+      "service.name": "function-runner",
+      "host.name": "srv-prod-lambda-01",
+      "k8s.cluster.name": "cluster-production-alpha",
+      "k8s.namespace.name": "serverless",
+      "dt.process.name": "Function Runner",
+      "dt.auth.origin": "dt0c01.SANITIZED",
+      "dt.openpipeline.pipelines": ["logs:default"],
+      "dt.openpipeline.source": "/api/v2/logs/ingest"
+    }
+  ]
+}

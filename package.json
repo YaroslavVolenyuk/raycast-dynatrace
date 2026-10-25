@@ -1,18 +1,20 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "raycast-dynatrace",
-  "title": "DT: Dynatrace connector",
-  "description": "Monitor your Dynatrace environment directly from Raycast — logs, problems, DQL, deployments and entities.",
+  "name": "dynatrace",
+  "title": "Dynatrace Connector",
+  "description": "Search logs and traces in Dynatrace Grail and manage multiple tenants — without leaving your keyboard.",
   "icon": "dynatrace-icon.png",
   "author": "yaroslav_volenyuk",
   "platforms": [
-    "macOS"
+    "macOS",
+    "Windows"
   ],
   "categories": [
     "Developer Tools",
     "Productivity"
   ],
   "keywords": [
+    "dt",
     "dynatrace",
     "observability",
     "logs",
@@ -22,17 +24,6 @@
     "grail"
   ],
   "license": "MIT",
-  "preferences": [
-    {
-      "name": "useMockData",
-      "title": "Use Mock Data",
-      "description": "Use fixture-backed mock data instead of the real Dynatrace API (for development)",
-      "type": "checkbox",
-      "required": false,
-      "default": false,
-      "label": "Enable mock mode"
-    }
-  ],
   "commands": [
     {
       "name": "dt-manage-tenants",
@@ -51,19 +42,38 @@
       "icon": "dynatrace-icon.png",
       "arguments": [
         {
-          "name": "timeframeValue",
-          "type": "text",
-          "placeholder": "24",
-          "required": false
-        },
-        {
-          "name": "timeframeUnit",
+          "name": "timeframe",
           "type": "dropdown",
-          "placeholder": "Hours",
+          "placeholder": "Last 24h",
           "data": [
-            { "title": "Minutes", "value": "m" },
-            { "title": "Hours", "value": "h" },
-            { "title": "Days", "value": "d" }
+            {
+              "title": "Last 15 min",
+              "value": "15m"
+            },
+            {
+              "title": "Last 30 min",
+              "value": "30m"
+            },
+            {
+              "title": "Last 1h",
+              "value": "1h"
+            },
+            {
+              "title": "Last 6h",
+              "value": "6h"
+            },
+            {
+              "title": "Last 24h",
+              "value": "24h"
+            },
+            {
+              "title": "Last 3d",
+              "value": "3d"
+            },
+            {
+              "title": "Last 7d",
+              "value": "7d"
+            }
           ],
           "required": false
         },
@@ -72,13 +82,82 @@
           "type": "dropdown",
           "placeholder": "All Logs",
           "data": [
-            { "title": "All Logs", "value": "all" },
-            { "title": "Error", "value": "error" },
-            { "title": "Fatal", "value": "fatal" },
-            { "title": "Warning", "value": "warning" },
-            { "title": "Info", "value": "info" },
-            { "title": "Debug", "value": "debug" }
+            {
+              "title": "All Logs",
+              "value": "all"
+            },
+            {
+              "title": "Error",
+              "value": "error"
+            },
+            {
+              "title": "Warn",
+              "value": "warn"
+            },
+            {
+              "title": "Info",
+              "value": "info"
+            },
+            {
+              "title": "None",
+              "value": "none"
+            }
           ],
+          "required": false
+        },
+        {
+          "name": "limit",
+          "type": "dropdown",
+          "placeholder": "100",
+          "data": [
+            {
+              "title": "50",
+              "value": "50"
+            },
+            {
+              "title": "100",
+              "value": "100"
+            },
+            {
+              "title": "250",
+              "value": "250"
+            },
+            {
+              "title": "500",
+              "value": "500"
+            }
+          ],
+          "required": false
+        }
+      ]
+    },
+    {
+      "name": "dt-search-traces",
+      "title": "Search Traces",
+      "subtitle": "Dynatrace",
+      "description": "Search distributed traces and spans in Dynatrace Grail",
+      "mode": "view",
+      "icon": "dynatrace-icon.png",
+      "arguments": [
+        {
+          "name": "timeframe",
+          "type": "dropdown",
+          "placeholder": "Last 24h",
+          "data": [
+            { "title": "Last 15 min", "value": "15m" },
+            { "title": "Last 30 min", "value": "30m" },
+            { "title": "Last 1h",     "value": "1h"  },
+            { "title": "Last 6h",     "value": "6h"  },
+            { "title": "Last 24h",    "value": "24h" },
+            { "title": "Last 3d",     "value": "3d"  },
+            { "title": "Last 7d",     "value": "7d"  }
+          ],
+          "required": false
+        },
+        {
+          "name": "traceId",
+          "type": "text",
+          "placeholder": "Trace ID (optional)",
           "required": false
         }
       ]
@@ -88,21 +167,22 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@raycast/api": "^1.85.2",
-    "@raycast/utils": "^1.17.0",
-    "zod": "^4.3.6"
+    "@raycast/api": "^1.104.23",
+    "@raycast/utils": "^2.2.7",
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "@raycast/eslint-config": "^2.0.4",
-    "@types/jest": "^30.0.0",
+    "@raycast/eslint-config": "2.0.4",
+    "@types/jest": "30.0.0",
     "@types/node": "22.13.10",
     "@types/react": "^19.2.17",
-    "eslint": "^9.22.0",
+    "eslint": "9.22.0",
     "jest": "30.4.1",
-    "prettier": "^3.5.3",
-    "ts-jest": "^29.4.11",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.8.2"
+    "knip": "5.61.3",
+    "prettier": "3.5.3",
+    "ts-jest": "29.4.11",
+    "ts-node": "10.9.2",
+    "typescript": "5.8.2"
   },
   "scripts": {
     "build": "ray build",
@@ -110,6 +190,7 @@
     "lint": "eslint src",
     "fix-lint": "eslint src --fix",
     "typecheck": "tsc --noEmit",
-    "test": "jest --passWithNoTests"
+    "test": "jest --passWithNoTests",
+    "knip": "knip"
   }
 }

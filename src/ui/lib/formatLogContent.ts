@@ -27,13 +27,3 @@ export function formatLogContent(content: string | null): string | null {
   // Stack traces and plain text are both fenced (injection-safe either way).
   return fenceRaw(content);
 }
-
-/** Extracts the first line of a stack trace (the error message), if present. */
-export function extractErrorMessage(content: string): string | null {
-  for (const line of content.split("\n")) {
-    if (line.match(/^\s*(Error|Exception|Throwable|Caused by):/)) {
-      return line.trim();
-    }
-  }
-  return null;
-}

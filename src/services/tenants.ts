@@ -1,8 +1,7 @@
 // CRUD operations for Dynatrace tenant configurations + active-tenant state.
 //
-// Data is stored in Raycast LocalStorage (non-synced, plaintext on disk — NOT
-// encrypted). The clientSecret stored here is accessible to anyone with
-// filesystem access to the machine. Access tokens are held in-memory only
+// Data is stored in Raycast LocalStorage (Raycast's encrypted local
+// database, machine-local, not synced). Access tokens are held in-memory only
 // (see sdk/auth) and never written to disk.
 
 import { LocalStorage } from "@raycast/api";
@@ -20,8 +19,8 @@ const tenantConfigSchema = z.object({
   clientSecret: z.string().min(1),
   ssoEndpoint: z.string().url(),
   scopes: z.array(z.string()),
-  accountUrn: z.string().optional(),
-  useClassicProxy: z.boolean().optional(),
+  // NOTE: legacy stored tenants may carry extra keys (e.g. useClassicProxy);
+  // z.object strips unknown keys, so they are dropped harmlessly on read.
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
