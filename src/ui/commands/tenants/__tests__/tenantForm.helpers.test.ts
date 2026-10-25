@@ -4,7 +4,7 @@ import {
   validateForm,
   buildTenantConfig,
   DEFAULT_SSO_ENDPOINT,
-  READ_ONLY_SCOPES,
+  OPTIONAL_SCOPES,
   REQUIRED_SCOPES,
   describeScopeCheck,
   type TenantFormValues,
@@ -16,7 +16,7 @@ const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValue
   clientId: "dt0s02.ABC",
   clientSecret: "dt0s02.ABC.dummySecretValueNotReal",
   ssoEndpoint: DEFAULT_SSO_ENDPOINT,
-  scopes: READ_ONLY_SCOPES.join("\n"),
+  scopes: REQUIRED_SCOPES.join("\n"),
   ...overrides,
 });
 
@@ -103,11 +103,17 @@ describe("buildTenantConfig", () => {
   });
 });
 
+describe("REQUIRED_SCOPES (pre-filled for new tenants)", () => {
+  it("does not pre-fill the optional events scope", () => {
+    expect(REQUIRED_SCOPES).not.toContain("storage:events:read");
+  });
+});
+
 describe("describeScopeCheck", () => {
   const withScopes = (scopes: string[]) => ({ scopes });
 
   it("is a clean success when everything is granted", () => {
-    expect(describeScopeCheck(withScopes([...READ_ONLY_SCOPES]))).toEqual({
+    expect(describeScopeCheck(withScopes([...REQUIRED_SCOPES, ...OPTIONAL_SCOPES]))).toEqual({
       style: "success",
       title: "Connection verified",
       message: undefined,
@@ -118,6 +124,9 @@ describe("describeScopeCheck", () => {
     const r = describeScopeCheck(withScopes([...REQUIRED_SCOPES]));
     expect(r.style).toBe("success");
     expect(r.message).toContain("storage:events:read");
+    // Both places must be named: granting it in Dynatrace alone does not put it in the token request.
+    expect(r.message).toMatch(/OAuth client/);
+    expect(r.message).toMatch(/tenant/);
   });
 
   it("fails when a required scope is missing", () => {
@@ -125,5 +134,29 @@ describe("describeScopeCheck", () => {
     expect(r.style).toBe("failure");
     expect(r.message).toContain("storage:spans:read");
     expect(r.message).not.toContain("storage:events:read");
+  });
+});
+
+// Users paste whatever is in the browser's address bar.
+describe("environment URL as pasted by users", () => {
+  it("keeps only the origin of a URL copied from the browser", () => {
+    const cfg = buildTenantConfig(
+      validValues({ tenantEndpoint: "https://abc12345.apps.dynatrace.com/ui/apps/dynatrace.logs?gtf=-2h#x" }),
+    );
+    expect(cfg.tenantEndpoint).toBe("https://abc12345.apps.dynatrace.com");
+  });
+
+  it("rejects a classic .live URL and suggests the platform URL", () => {
+    const errors = validateForm(validValues({ tenantEndpoint: "https://abc12345.live.dynatrace.com" }));
+    expect(errors.tenantEndpoint).toContain("https://abc12345.apps.dynatrace.com");
+  });
+
+  it("rejects a classic URL with a path too", () => {
+    const errors = validateForm(validValues({ tenantEndpoint: "https://abc12345.live.dynatrace.com/#dashboards" }));
+    expect(errors.tenantEndpoint).toContain("https://abc12345.apps.dynatrace.com");
+  });
+
+  it("accepts a non-Dynatrace host (proxies, Managed) unchanged", () => {
+    expect(validateForm(validValues({ tenantEndpoint: "https://dt.example.com" })).tenantEndpoint).toBeUndefined();
   });
 });

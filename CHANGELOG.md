@@ -25,8 +25,8 @@ working with a Dynatrace environment from Raycast.
   optional extra DQL filter. A failed fetch is never shown as "no problems".
 - OAuth 2.0 client-credentials authentication against Dynatrace SSO, with
   the required `storage:buckets:read`, `storage:logs:read` and
-  `storage:spans:read` scopes
-  pre-filled when adding a tenant.
+  `storage:spans:read` scopes pre-filled when adding a tenant. The optional
+  `storage:events:read` scope for Problems in Menu Bar is added by hand.
 - Automatic polling of long-running Grail queries via the `query:poll` API.
 - A layered `src/sdk | services | ui` architecture with lint-enforced
   boundaries, project tooling (TypeScript, ESLint, Prettier, Jest), and a

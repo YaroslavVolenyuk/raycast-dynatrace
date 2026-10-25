@@ -21,12 +21,13 @@ export const DEFAULT_SSO_ENDPOINT = PROD_SSO_ENDPOINT;
  *
  * Optional (single feature, soft warning only):
  *   - storage:events:read — Problems in Menu Bar (macOS)
+ *
+ * Only the required set is pre-filled for new tenants: requesting a scope the
+ * OAuth client was not granted may fail the whole token request (invalid_scope),
+ * which would break every command for the sake of one optional feature.
  */
 export const REQUIRED_SCOPES = ["storage:buckets:read", "storage:logs:read", "storage:spans:read"] as const;
 export const OPTIONAL_SCOPES = ["storage:events:read"] as const;
-
-/** Suggested set for new tenants: everything the extension can use. */
-export const READ_ONLY_SCOPES = [...REQUIRED_SCOPES, ...OPTIONAL_SCOPES] as const;
 
 export interface ScopeCheckToast {
   style: "success" | "failure";
@@ -52,7 +53,9 @@ export function describeScopeCheck(tenant: Pick<TenantConfig, "scopes">): ScopeC
     style: "success",
     title: "Connection verified",
     message:
-      missingOptional.length > 0 ? `Optional: add ${missingOptional.join(", ")} for Problems in Menu Bar` : undefined,
+      missingOptional.length > 0
+        ? `Optional, for Problems in Menu Bar: grant ${missingOptional.join(", ")} to the OAuth client, then add it to this tenant's scopes`
+        : undefined,
   };
 }
 
@@ -83,6 +86,37 @@ export function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
 
+/**
+ * Environment URL as stored. A URL pasted from the browser on a Dynatrace SaaS
+ * host (`…/ui/apps/dynatrace.logs?gtf=-2h`) is cut back to its origin, otherwise
+ * every API path would be appended to the app path. Other hosts (proxies) may
+ * legitimately carry a base path and are only trimmed.
+ */
+export function normalizeEnvironmentUrl(url: string): string {
+  const trimmed = normalizeUrl(url);
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.hostname.endsWith(".dynatrace.com")) return parsed.origin;
+  } catch {
+    // invalid URL — validateForm reports it
+  }
+  return trimmed;
+}
+
+/**
+ * Platform (Grail) URL for a classic `<id>.live.dynatrace.com` URL, or undefined
+ * when the URL is not a classic one. Grail APIs only answer on `.apps.`.
+ */
+export function platformUrlForClassic(url: string): string | undefined {
+  try {
+    const { hostname } = new URL(url);
+    const match = hostname.match(/^([^.]+)\.live\.dynatrace\.com$/);
+    return match ? `https://${match[1]}.apps.dynatrace.com` : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isHttpsUrl(value: string): boolean {
   try {
     return new URL(value).protocol === "https:";
@@ -100,9 +134,11 @@ export function validateForm(values: TenantFormValues): Partial<Record<keyof Ten
 
   if (!values.name.trim()) errors.name = "Name is required";
 
-  const endpoint = normalizeUrl(values.tenantEndpoint);
+  const endpoint = normalizeEnvironmentUrl(values.tenantEndpoint);
+  const platformUrl = platformUrlForClassic(endpoint);
   if (!endpoint) errors.tenantEndpoint = "Environment URL is required";
   else if (!isHttpsUrl(endpoint)) errors.tenantEndpoint = "Must be a valid https:// URL";
+  else if (platformUrl) errors.tenantEndpoint = `Use the platform URL: ${platformUrl}`;
 
   if (!values.clientId.trim()) errors.clientId = "Client ID is required";
   if (!values.clientSecret.trim()) errors.clientSecret = "Client Secret is required";
@@ -123,7 +159,7 @@ export function validateForm(values: TenantFormValues): Partial<Record<keyof Ten
  * fresh id is generated.
  */
 export function buildTenantConfig(values: TenantFormValues, existingId?: string): TenantConfig {
-  const tenantEndpoint = normalizeUrl(values.tenantEndpoint);
+  const tenantEndpoint = normalizeEnvironmentUrl(values.tenantEndpoint);
   return {
     id: existingId ?? generateTenantId(),
     name: values.name.trim(),
