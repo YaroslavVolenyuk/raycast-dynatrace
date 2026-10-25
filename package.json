@@ -182,6 +182,68 @@
           "required": false
         }
       ]
+    },
+    {
+      "name": "dt-menubar-problems",
+      "title": "Problems in Menu Bar",
+      "subtitle": "Dynatrace",
+      "description": "Show the number of open Dynatrace problems in the macOS menu bar",
+      "mode": "menu-bar",
+      "icon": "dynatrace-icon.png",
+      "interval": "10m",
+      "platforms": [
+        "macOS"
+      ],
+      "preferences": [
+        {
+          "name": "refreshMinutes",
+          "type": "dropdown",
+          "title": "Refresh Interval",
+          "description": "How often the menu bar queries Dynatrace. Each refresh is a billable DQL query.",
+          "required": false,
+          "default": "30",
+          "data": [
+            {
+              "title": "Every 30 minutes",
+              "value": "30"
+            },
+            {
+              "title": "Every hour",
+              "value": "60"
+            }
+          ]
+        },
+        {
+          "name": "lookback",
+          "type": "dropdown",
+          "title": "Look-back Window",
+          "description": "Only problems that were updated within this window are checked. Longer windows scan more data.",
+          "required": false,
+          "default": "7d",
+          "data": [
+            {
+              "title": "Last 24 hours",
+              "value": "1d"
+            },
+            {
+              "title": "Last 7 days",
+              "value": "7d"
+            },
+            {
+              "title": "Last 30 days",
+              "value": "30d"
+            }
+          ]
+        },
+        {
+          "name": "extraFilter",
+          "type": "textfield",
+          "title": "Extra DQL Filter",
+          "description": "Optional. A DQL filter expression added to the query, e.g. event.category == \"ERROR\". Do not include 'filter' or '|' (a '|' inside a string literal is rejected too).",
+          "required": false,
+          "placeholder": "event.category == \"ERROR\""
+        }
+      ]
     }
   ],
   "engines": {

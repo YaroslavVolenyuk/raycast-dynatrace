@@ -43,6 +43,7 @@ Tracing explorer for the corresponding trace.
      returns empty results instead of an error)
    - `storage:logs:read` (required for Search Logs)
    - `storage:spans:read` (required for Search Traces)
+   - `storage:events:read` (required for Problems in Menu Bar, macOS only)
 3. In Raycast, run **Manage Tenants** and add a tenant. The scope fields are
    pre-filled with the scopes above. You'll need:
    - the environment URL, in the form `https://<environment-id>.apps.dynatrace.com`

@@ -16,3 +16,12 @@ export function buildTraceUrl(baseUrl: string, traceId: string): string {
   const filter = encodeURIComponent(`trace.id="${traceId}"`);
   return `${baseUrl}/ui/apps/dynatrace.distributedtracing/explorer?filter=${filter}`;
 }
+
+/**
+ * URL of a problem in the Dynatrace Problems app.
+ * `problemId` is Grail's `event.id` (not the "P-…" display id).
+ * Format taken from a live tenant URL (2026-10-25).
+ */
+export function buildProblemUrl(baseUrl: string, problemId: string): string {
+  return `${baseUrl}/ui/apps/dynatrace.davis.problems/problem/${encodeURIComponent(problemId)}`;
+}

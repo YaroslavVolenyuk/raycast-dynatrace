@@ -32,3 +32,16 @@ export {
   type SpanStatus,
   type ListSpansOptions,
 } from "./spans";
+
+export {
+  problemRecordSchema,
+  normalizeProblem,
+  buildProblemsQuery,
+  validateExtraFilter,
+  listProblems,
+  PROBLEM_PAGE_SIZE,
+  PROBLEMS_REQUIRED_SCOPES,
+  type ProblemRecord,
+  type ProblemEntry,
+  type ListProblemsOptions,
+} from "./problems";

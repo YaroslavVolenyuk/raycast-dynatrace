@@ -1,0 +1,36 @@
+{
+  "_provenance": "Shape captured from a live Grail `fetch dt.davis.problems` record (2026-10-25). Names, ids, tags and entities are synthetic. event.id equals classic_problem_id and is the id used in the Problems app URL; display_id (P-…) is the human label.",
+  "records": [
+    {
+      "timestamp": "2026-10-25T12:16:40.934969568+01:00",
+      "event.kind": "DAVIS_PROBLEM",
+      "event.name": "Response time degradation",
+      "event.id": "-1000000000000000001_1792921500000V2",
+      "classic_problem_id": "-1000000000000000001_1792921500000V2",
+      "display_id": "P-260000001",
+      "event.category": "CUSTOM_ALERT",
+      "event.status": "CLOSED",
+      "event.start": "2026-10-25T09:51:00.000Z",
+      "event.end": "2026-10-25T11:13:00.000Z",
+      "affected_entity_ids": ["SERVICE-0000000000000001"],
+      "affected_entity_names": ["example-service-*"],
+      "maintenance.is_under_maintenance": false,
+      "dt.davis.mute.status": "NOT_MUTED"
+    },
+    {
+      "timestamp": "2026-10-25T12:20:00.000000000+01:00",
+      "event.kind": "DAVIS_PROBLEM",
+      "event.name": "Out-of-memory kills",
+      "event.id": "-1000000000000000002_1792676100000V2",
+      "classic_problem_id": "-1000000000000000002_1792676100000V2",
+      "display_id": "P-260000002",
+      "event.category": "ERROR",
+      "event.status": "ACTIVE",
+      "event.start": "2026-10-22T13:35:00.000Z",
+      "affected_entity_ids": ["CLOUD_APPLICATION-0000000000000001"],
+      "affected_entity_names": ["example-deployment"],
+      "maintenance.is_under_maintenance": false,
+      "dt.davis.mute.status": "NOT_MUTED"
+    }
+  ]
+}
