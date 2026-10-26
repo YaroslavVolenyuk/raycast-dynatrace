@@ -14,27 +14,41 @@ import {
   Toast,
   useNavigation,
 } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
+import { usePromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
 import { testTenantConnection } from "../../../sdk";
 import { describeScopeCheck } from "./tenantForm.helpers";
-import { listTenants, getActiveTenant, setActiveTenant, deleteTenant } from "../../../services";
+import {
+  listTenants,
+  getActiveTenant,
+  setActiveTenant,
+  deleteTenant,
+  resetTenants,
+  countUnreadableTenants,
+} from "../../../services";
 import TenantForm from "./TenantForm";
 
 export default function ManageTenants() {
   const { push } = useNavigation();
 
-  const { data, isLoading, revalidate } = useCachedPromise(
+  // usePromise, not useCachedPromise: tenants carry client secrets, and the
+  // Raycast Cache is plain files on disk.
+  const { data, isLoading, error, revalidate } = usePromise(
     async () => {
-      const [tenants, active] = await Promise.all([listTenants(), getActiveTenant()]);
-      return { tenants, activeId: active?.id ?? null };
+      const [tenants, active, unreadable] = await Promise.all([
+        listTenants(),
+        getActiveTenant(),
+        countUnreadableTenants(),
+      ]);
+      return { tenants, activeId: active?.id ?? null, unreadable };
     },
     [],
-    { keepPreviousData: true },
+    { failureToastOptions: { title: "Could not read tenants" } },
   );
 
   const tenants = data?.tenants ?? [];
   const activeId = data?.activeId ?? null;
+  const unreadable = data?.unreadable ?? 0;
 
   async function handleSetActive(tenant: TenantConfig) {
     await setActiveTenant(tenant.id);
@@ -70,6 +84,45 @@ export default function ManageTenants() {
     revalidate();
   }
 
+  async function handleReset() {
+    const confirmed = await confirmAlert({
+      title: "Reset all tenants?",
+      message: "This deletes every stored tenant and its credentials from this machine. This cannot be undone.",
+      icon: Icon.Trash,
+      primaryAction: { title: "Reset", style: Alert.ActionStyle.Destructive },
+    });
+    if (!confirmed) return;
+    try {
+      await resetTenants();
+    } catch (e) {
+      await showToast({
+        style: Toast.Style.Failure,
+        title: "Reset failed",
+        message: e instanceof Error ? e.message : String(e),
+      });
+      return;
+    }
+    await showToast({ style: Toast.Style.Success, title: "Tenants reset" });
+    revalidate();
+  }
+
+  if (error) {
+    return (
+      <List>
+        <List.EmptyView
+          icon={{ source: Icon.Warning, tintColor: Color.Red }}
+          title="Tenant storage could not be read"
+          description={`${error.message}\nReset removes all stored tenants so you can add them again.`}
+          actions={
+            <ActionPanel>
+              <Action title="Reset Tenants" icon={Icon.Trash} style={Action.Style.Destructive} onAction={handleReset} />
+            </ActionPanel>
+          }
+        />
+      </List>
+    );
+  }
+
   return (
     <List isLoading={isLoading} searchBarPlaceholder="Filter tenants…">
       <List.EmptyView
@@ -82,6 +135,25 @@ export default function ManageTenants() {
           </ActionPanel>
         }
       />
+      {unreadable > 0 && (
+        <List.Section title="Storage">
+          <List.Item
+            icon={{ source: Icon.Warning, tintColor: Color.Orange }}
+            title={`${unreadable} stored ${unreadable === 1 ? "tenant" : "tenants"} could not be read`}
+            subtitle="Kept as is; Reset Tenants removes them"
+            actions={
+              <ActionPanel>
+                <Action
+                  title="Reset Tenants"
+                  icon={Icon.Trash}
+                  style={Action.Style.Destructive}
+                  onAction={handleReset}
+                />
+              </ActionPanel>
+            }
+          />
+        </List.Section>
+      )}
       <List.Section title="Tenants" subtitle={tenants.length ? String(tenants.length) : undefined}>
         {tenants.map((tenant) => {
           const isActive = tenant.id === activeId;

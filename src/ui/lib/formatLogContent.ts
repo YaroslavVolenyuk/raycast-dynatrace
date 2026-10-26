@@ -1,13 +1,4 @@
-/**
- * Wraps untrusted content in a fenced code block whose fence is longer than the
- * longest backtick run in the content, preventing injection breakout.
- * (CommonMark: a longer fence always closes the block.)
- */
-function fenceRaw(s: string, lang = ""): string {
-  const longestRun = Math.max(0, ...(s.match(/`+/g) ?? []).map((m) => m.length));
-  const fence = "`".repeat(Math.max(3, longestRun + 1));
-  return `${fence}${lang}\n${s}\n${fence}`;
-}
+import { fenceCode } from "./markdown";
 
 /**
  * Formats log content for display in a Raycast Detail view.
@@ -19,11 +10,11 @@ export function formatLogContent(content: string | null): string | null {
 
   try {
     const parsed = JSON.parse(content);
-    return fenceRaw(JSON.stringify(parsed, null, 2), "json");
+    return fenceCode(JSON.stringify(parsed, null, 2), "json");
   } catch {
     // not JSON — fall through
   }
 
   // Stack traces and plain text are both fenced (injection-safe either way).
-  return fenceRaw(content);
+  return fenceCode(content);
 }

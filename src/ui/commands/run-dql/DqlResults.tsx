@@ -14,6 +14,7 @@ import {
   summarizeRecord,
   toCsv,
 } from "../../lib/dqlRecord";
+import { fenceCode } from "../../lib/markdown";
 import { timeframeLabel } from "./timeframes";
 
 interface DqlResultsProps {
@@ -147,7 +148,7 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
                     target={
                       <Detail
                         navigationTitle={`Record ${index + 1}`}
-                        markdown={`${recordMarkdownTable(record, result.columns)}\n\n\`\`\`json\n${json}\n\`\`\``}
+                        markdown={`${recordMarkdownTable(record, result.columns)}\n\n${fenceCode(json, "json")}`}
                         actions={
                           <ActionPanel>
                             <Action.CopyToClipboard title="Copy Record as JSON" content={json} />

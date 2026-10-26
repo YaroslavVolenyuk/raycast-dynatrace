@@ -3,6 +3,7 @@ import type { SpanEntry } from "../../../sdk/resources";
 import { formatDuration } from "../../../sdk/resources";
 import type { TenantConfig } from "../../../sdk/auth";
 import { buildTraceUrl } from "../../lib/deepLinks";
+import { keyValueTable, fenceCode } from "../../lib/markdown";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -20,17 +21,6 @@ function statusColor(code: string): Color {
     default:
       return Color.SecondaryText;
   }
-}
-
-// Insert a zero-width space before each dot so the markdown renderer doesn't
-// autolink dotted names like trace.id / span.id (".id"/".name" look like TLDs).
-const noAutolink = (s: string): string => s.replace(/\./g, "​.");
-
-/** Renders key/value rows as a two-column markdown table. */
-function mdKeyValues(rows: Array<[string, string | undefined]>): string {
-  const valid = rows.filter((r): r is [string, string] => r[1] !== undefined && r[1] !== "");
-  if (valid.length === 0) return "";
-  return ["| Field | Value |", "|---|---|", ...valid.map(([k, v]) => `| ${noAutolink(k)} | ${v} |`)].join("\n");
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -62,7 +52,7 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
     ["duration", durationStr],
     ["status.message", entry.statusMessage],
   ];
-  const coreTable = mdKeyValues(coreRows);
+  const coreTable = keyValueTable(coreRows);
   if (coreTable) sections.push("### Span", coreTable);
 
   // HTTP
@@ -75,7 +65,7 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
       ["server.address", val(raw["server.address"])],
       ["server.port", val(raw["server.port"])],
     ];
-    const httpTable = mdKeyValues(httpRows);
+    const httpTable = keyValueTable(httpRows);
     if (httpTable) sections.push("### HTTP", httpTable);
   }
 
@@ -89,7 +79,7 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
       ["server.address", val(raw["server.address"])],
       ["server.port", val(raw["server.port"])],
     ];
-    const dbTable = mdKeyValues(dbRows);
+    const dbTable = keyValueTable(dbRows);
     if (dbTable) sections.push("### Database", dbTable);
   }
 
@@ -100,12 +90,12 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
       ["rpc.service", val(raw["rpc.service"])],
       ["rpc.method", val(raw["rpc.method"])],
     ];
-    const rpcTable = mdKeyValues(rpcRows);
+    const rpcTable = keyValueTable(rpcRows);
     if (rpcTable) sections.push("### RPC", rpcTable);
   }
 
   // Raw JSON
-  sections.push("### Raw Fields", `\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\``);
+  sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
 
   const markdown = sections.join("\n\n");
 

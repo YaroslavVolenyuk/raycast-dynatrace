@@ -5,5 +5,13 @@
  * must not import src/ui. Future modules: savedQueries, export, deepLinks.
  */
 export { StorageKeys } from "./storageKeys";
-export { listTenants, saveTenant, deleteTenant, getActiveTenant, setActiveTenant } from "./tenants";
+export {
+  listTenants,
+  saveTenant,
+  deleteTenant,
+  getActiveTenant,
+  setActiveTenant,
+  resetTenants,
+  countUnreadableTenants,
+} from "./tenants";
 export { getLastDqlQuery, setLastDqlQuery, getLastDqlTimeframe, setLastDqlTimeframe } from "./dqlHistory";

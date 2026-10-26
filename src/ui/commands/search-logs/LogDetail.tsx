@@ -4,6 +4,7 @@ import type { TenantConfig } from "../../../sdk";
 import { escapeDqlString } from "../../../sdk";
 import { formatLogContent } from "../../lib/formatLogContent";
 import { buildTraceUrl } from "../../lib/deepLinks";
+import { keyValueTable, fenceCode } from "../../lib/markdown";
 import SearchTraces from "../search-traces/SearchTraces";
 import RunDql from "../run-dql/RunDql";
 
@@ -67,13 +68,6 @@ function buildLogContextQuery(raw: Record<string, unknown>, limit = 100): string
     return `fetch logs\n| filter dt.process.name == "${escapeDqlString(processName)}"\n| limit ${limit}`;
   }
   return `fetch logs\n| limit ${limit}`;
-}
-
-/** Renders a markdown table from key-value pairs. Skips undefined values. */
-function mdTable(rows: Array<[string, string | undefined]>): string {
-  const valid = rows.filter((r): r is [string, string] => r[1] !== undefined && r[1] !== "");
-  if (valid.length === 0) return "";
-  return ["| Field | Value |", "|---|---|", ...valid.map(([k, v]) => `| ${k} | ${v} |`)].join("\n");
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -153,7 +147,7 @@ export default function LogDetail({ entry, tenant }: { entry: LogEntry; tenant?:
 
   // Topology section
   if (hasTopology) {
-    const topologyTable = mdTable([
+    const topologyTable = keyValueTable([
       ["dt.source_entity", sourceEntities],
       ["dt.entity.host", entityHost],
       ["dt.entity.process_group_instance", entityProcess],
@@ -214,16 +208,16 @@ export default function LogDetail({ entry, tenant }: { entry: LogEntry; tenant?:
   if (eventType) fieldRows.push(["event.type", eventType]);
   if (envVal) fieldRows.push(["dt.environment.id", envVal]);
 
-  const fieldsTable = mdTable(fieldRows);
+  const fieldsTable = keyValueTable(fieldRows);
   if (fieldsTable) {
     sections.push("### Fields", fieldsTable);
   }
 
   // DQL filter
-  sections.push("### DQL Filter *(⌘D to copy)*", `\`\`\`\n${dqlFilter}\n\`\`\``);
+  sections.push("### DQL Filter *(⌘D to copy)*", fenceCode(dqlFilter));
 
   // Raw JSON at the bottom
-  sections.push("### Raw Fields", `\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\``);
+  sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
 
   const markdown = sections.join("\n\n");
 

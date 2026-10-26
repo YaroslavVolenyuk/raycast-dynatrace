@@ -1,6 +1,8 @@
 // Rendering helpers for free-form DQL records (Run DQL). The record shape is
 // whatever the query returns, so everything here works on plain key/value maps.
 
+import { escapeCell } from "./markdown";
+
 /** Fields that make a good row title, in order of preference. */
 const TITLE_CANDIDATES = [
   "content",
@@ -85,11 +87,10 @@ export function toCsv(records: readonly Record<string, unknown>[], columns: read
   return [columns.map(cell).join(","), ...records.map((r) => columns.map((c) => cell(r[c])).join(","))].join("\n");
 }
 
-/** Markdown table of all fields of one record; pipes and line breaks escaped. */
+/** Markdown table of all fields of one record; every key and value escaped. */
 export function recordMarkdownTable(record: Record<string, unknown>, columns: readonly string[]): string {
-  const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\r?\n/g, " ");
   const rows = columns
     .filter((c) => record[c] !== undefined)
-    .map((c) => `| ${esc(c)} | ${esc(formatCell(record[c], 300))} |`);
+    .map((c) => `| ${escapeCell(c)} | ${escapeCell(formatCell(record[c], 300))} |`);
   return ["| Field | Value |", "|---|---|", ...rows].join("\n");
 }

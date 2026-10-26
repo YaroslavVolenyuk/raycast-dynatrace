@@ -25,8 +25,8 @@ Search Grail logs using DQL. Filter by:
 - result limit: 50 to 500
 
 Selecting a log entry opens a detail view with its fields rendered as
-markdown, plus a deep link that opens the matching log in the Dynatrace
-web UI.
+markdown. When the log carries a trace ID, the detail view links to that
+trace in Distributed Traces and in Search Traces.
 
 ### Search Traces
 
@@ -92,7 +92,8 @@ Tenant configuration, including the OAuth client secret, is stored in
 Raycast's LocalStorage, which is Raycast's encrypted local database. It stays
 on this machine and is not synced anywhere. Access tokens obtained from Dynatrace SSO are held in
 memory only for the lifetime of the Raycast process and are never
-persisted.
+persisted. Log and span results are not cached on disk either; only the
+menu bar keeps its last problem list in Raycast's cache.
 
 ## Architecture
 

@@ -1,5 +1,5 @@
 import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
-import { useCachedPromise } from "@raycast/utils";
+import { usePromise } from "@raycast/utils";
 import { useMemo, useState } from "react";
 import {
   listSpans,
@@ -66,9 +66,9 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
 
   const { tenant, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
 
-  const { data, isLoading, error, revalidate } = useCachedPromise(
+  const { data, isLoading, error, revalidate } = usePromise(
     (tf: string, tid: string | undefined, st: SpanStatus, tenantId: string) => {
-      void tenantId;
+      void tenantId; // in the deps so a tenant switch refetches
       return listSpans(liveTransport, tenant!, {
         timeframeDql: tf,
         timeframe: parseTimeframe(tf),
@@ -77,7 +77,7 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
       });
     },
     [timeframeStr, initialTraceId, status, tenant?.id ?? ""],
-    { execute: !!tenant, keepPreviousData: true },
+    { execute: !!tenant },
   );
 
   const entries = useMemo<SpanEntry[]>(() => {

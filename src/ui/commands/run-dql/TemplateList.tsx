@@ -1,5 +1,6 @@
 import { List, ActionPanel, Action, Icon, Alert, confirmAlert, useNavigation } from "@raycast/api";
 import { DQL_TEMPLATES, type DqlTemplate } from "./templates";
+import { fenceCode } from "../../lib/markdown";
 
 interface TemplateListProps {
   /** The query currently in the form; replacing a non-empty one asks first. */
@@ -33,7 +34,7 @@ export default function TemplateList({ currentQuery, onPick }: TemplateListProps
               key={t.title}
               title={t.title}
               keywords={[t.query]}
-              detail={<List.Item.Detail markdown={`\`\`\`\n${t.query}\n\`\`\``} />}
+              detail={<List.Item.Detail markdown={fenceCode(t.query)} />}
               actions={
                 <ActionPanel>
                   <Action title="Use Template" icon={Icon.Code} onAction={() => use(t)} />

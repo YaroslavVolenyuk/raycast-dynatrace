@@ -1,7 +1,15 @@
 // Tests for src/services/tenants.ts — CRUD + data integrity.
 
 import { LocalStorage } from "@raycast/api";
-import { listTenants, saveTenant, deleteTenant, getActiveTenant, setActiveTenant } from "../tenants";
+import {
+  listTenants,
+  saveTenant,
+  deleteTenant,
+  getActiveTenant,
+  setActiveTenant,
+  resetTenants,
+  countUnreadableTenants,
+} from "../tenants";
 import type { TenantConfig } from "../../sdk/auth";
 import { StorageKeys } from "../storageKeys";
 
@@ -44,6 +52,26 @@ describe("listTenants", () => {
     const result = await listTenants();
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe("good");
+  });
+
+  it("keeps unreadable records across save and delete, and counts them", async () => {
+    const invalid = { id: "", name: "broken" };
+    await LocalStorage.setItem(StorageKeys.tenants, JSON.stringify([makeTenant("a"), invalid]));
+    expect(await countUnreadableTenants()).toBe(1);
+
+    await saveTenant(makeTenant("b"));
+    await deleteTenant("a");
+
+    const stored = JSON.parse((await LocalStorage.getItem(StorageKeys.tenants)) as string);
+    expect(stored).toContainEqual(invalid);
+    expect((await listTenants()).map((t) => t.id)).toEqual(["b"]);
+    expect(await countUnreadableTenants()).toBe(1);
+  });
+
+  it("treats non-array JSON as corrupted instead of overwriting it", async () => {
+    await LocalStorage.setItem(StorageKeys.tenants, JSON.stringify({ not: "a list" }));
+    await expect(listTenants()).rejects.toThrow(/corrupted/);
+    await expect(saveTenant(makeTenant("x"))).rejects.toThrow(/corrupted/);
   });
 });
 
@@ -117,5 +145,18 @@ describe("getActiveTenant", () => {
     await saveTenant(makeTenant("second"));
     await setActiveTenant("gone");
     expect((await getActiveTenant())?.id).toBe("first");
+  });
+});
+
+describe("resetTenants", () => {
+  it("recovers from corrupted storage", async () => {
+    await LocalStorage.setItem(StorageKeys.tenants, "{not json");
+    await LocalStorage.setItem(StorageKeys.tenantsActive, "x");
+    await expect(listTenants()).rejects.toThrow(/Reset Tenants/);
+    await resetTenants();
+    expect(await listTenants()).toEqual([]);
+    expect(await LocalStorage.getItem(StorageKeys.tenantsActive)).toBeNull();
+    await saveTenant(makeTenant("fresh"));
+    expect((await listTenants()).map((t) => t.id)).toEqual(["fresh"]);
   });
 });

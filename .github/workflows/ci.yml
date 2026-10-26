@@ -43,7 +43,7 @@ jobs:
           echo "SDK boundary OK."
 
       - name: Security audit (runtime deps only)
-        run: npm audit --omit=dev || true
+        run: npm audit --omit=dev --audit-level=high
 
   gitleaks:
     runs-on: ubuntu-latest
