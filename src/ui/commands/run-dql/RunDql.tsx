@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getLastDqlQuery, getLastDqlTimeframe, setLastDqlQuery, setLastDqlTimeframe } from "../../../services";
 import { useActiveTenant } from "../../hooks";
 import DqlResults from "./DqlResults";
+import SuggestList from "./SuggestList";
 import { useDqlVerification } from "./useDqlVerification";
 import { DEFAULT_TIMEFRAME, TIMEFRAME_PRESETS } from "./timeframes";
 
@@ -116,6 +117,14 @@ export default function RunDql(
       actions={
         <ActionPanel>
           <Action.SubmitForm title="Run Query" icon={Icon.Play} onSubmit={handleSubmit} />
+          {selectedTenant && (
+            <Action
+              title="Suggest Next…"
+              icon={Icon.LightBulb}
+              shortcut={{ modifiers: ["cmd"], key: "." }}
+              onAction={() => push(<SuggestList tenant={selectedTenant} query={dql} onChange={setDql} />)}
+            />
+          )}
           <Action
             title="Clear Query"
             icon={Icon.Trash}
@@ -163,7 +172,7 @@ export default function RunDql(
         id="dql"
         title="Query"
         placeholder={'fetch logs\n// Add filters by: | filter matchesValue(field, "value")\n| sort timestamp desc'}
-        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer."
+        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer. ⌘. suggests what can come next."
         value={dql}
         error={dqlError ?? syntaxError}
         onChange={(v) => {
