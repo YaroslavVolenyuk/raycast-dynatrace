@@ -48,15 +48,6 @@ function kindIcon(kind: string): Icon {
   }
 }
 
-function relativeTime(timestamp: string): string {
-  const diffMin = Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000);
-  return diffMin < 60
-    ? `${diffMin}m`
-    : diffMin < 1440
-      ? `${Math.floor(diffMin / 60)}h`
-      : `${Math.floor(diffMin / 1440)}d`;
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /**
@@ -168,21 +159,12 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
         <List.Item
           key={`${entry.traceId}-${entry.spanId}-${index}`}
           icon={{ source: kindIcon(entry.kind), tintColor: statusColor(entry.statusCode) }}
-          title={entry.service ?? "Unknown service"}
+          title={{
+            value: `${entry.service ?? "Unknown service"}${entry.durationUs != null ? ` · ${formatDuration(entry.durationUs)}` : ""}`,
+            tooltip: entry.durationUs != null ? `Duration: ${formatDuration(entry.durationUs)}` : undefined,
+          }}
           subtitle={entry.name.length > 55 ? entry.name.slice(0, 52) + "…" : entry.name}
-          accessories={[
-            ...(entry.durationUs != null
-              ? [
-                  {
-                    icon: Icon.Clock,
-                    text: formatDuration(entry.durationUs),
-                    tooltip: `Duration: ${formatDuration(entry.durationUs)}`,
-                  },
-                ]
-              : []),
-            { text: relativeTime(entry.startTime), tooltip: entry.startTime },
-            { tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } },
-          ]}
+          accessories={[{ tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } }]}
           actions={
             <ActionPanel>
               <Action
