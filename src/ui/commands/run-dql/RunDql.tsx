@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getLastDqlQuery, getLastDqlTimeframe, setLastDqlQuery, setLastDqlTimeframe } from "../../../services";
 import { useActiveTenant } from "../../hooks";
 import DqlResults from "./DqlResults";
+import { useDqlVerification } from "./useDqlVerification";
 import { DEFAULT_TIMEFRAME, TIMEFRAME_PRESETS } from "./timeframes";
 
 interface RunDqlLaunchContext {
@@ -54,12 +55,18 @@ export default function RunDql(
     if (tenant && !tenantId) setTenantId(tenant.id);
   }, [tenant]);
 
+  const selectedTenant = tenants.find((t) => t.id === tenantId) ?? tenant;
+  const verification = useDqlVerification(selectedTenant, dql);
+  // Only show an error that belongs to the text as it is now, not to an older version.
+  const syntaxError = verification.checkedQuery === dql.trim() ? verification.error : undefined;
+
   function handleSubmit(values: FormValues) {
     const query = values.dql.trim();
     if (!query) {
       setDqlError("Enter a DQL query");
       return;
     }
+    if (syntaxError) return; // already shown under the field; running it would only fail
     const selected = tenants.find((t) => t.id === (values.tenantId ?? tenantId)) ?? tenant;
     if (!selected) return;
 
@@ -158,7 +165,7 @@ export default function RunDql(
         placeholder={'fetch logs\n// Add filters by: | filter matchesValue(field, "value")\n| sort timestamp desc'}
         info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer."
         value={dql}
-        error={dqlError}
+        error={dqlError ?? syntaxError}
         onChange={(v) => {
           setDql(v);
           if (dqlError && v.trim()) setDqlError(undefined);
