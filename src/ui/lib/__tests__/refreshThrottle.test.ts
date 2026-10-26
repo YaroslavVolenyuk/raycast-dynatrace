@@ -1,4 +1,4 @@
-import { shouldFetch } from "../refreshThrottle";
+import { formatClock, shouldFetch } from "../refreshThrottle";
 
 const MIN = 60_000;
 
@@ -15,5 +15,11 @@ describe("shouldFetch", () => {
   });
   it("force always fetches", () => {
     expect(shouldFetch({ now: 1, lastFetchedAt: 0, intervalMinutes: 60, force: true })).toBe(true);
+  });
+});
+
+describe("formatClock", () => {
+  it("formats the time of the shown result as hours and minutes", () => {
+    expect(formatClock(new Date(2026, 9, 25, 18, 32, 40).getTime())).toMatch(/18[:.]32|6[:.]32/);
   });
 });

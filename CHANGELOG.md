@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Initial Version] - {PR_MERGE_DATE}
 
-Initial release of the Dynatrace extension, with four commands for
+Initial release of the Dynatrace extension, with five commands for
 working with a Dynatrace environment from Raycast.
 
 ### Added
@@ -21,8 +21,10 @@ working with a Dynatrace environment from Raycast.
   Dynatrace Distributed Tracing explorer.
 - **Problems in Menu Bar** (macOS) — show the number of open Davis problems
   in the menu bar and open any of them in the Dynatrace Problems app.
-  Configurable refresh interval (30 min / 1 h), look-back window and an
+  Configurable refresh interval (15 min to 12 h), look-back window and an
   optional extra DQL filter. A failed fetch is never shown as "no problems".
+- **Refresh Problems** (macOS) — fetch open problems now and update the menu
+  bar; also behind the menu bar's Refresh item.
 - OAuth 2.0 client-credentials authentication against Dynatrace SSO, with
   the required `storage:buckets:read`, `storage:logs:read` and
   `storage:spans:read` scopes pre-filled when adding a tenant. The optional

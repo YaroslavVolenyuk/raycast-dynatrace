@@ -1,0 +1,175 @@
+// Loading, throttling and caching of the menu bar problems result. Shared by the
+// menu bar command (reads) and the Refresh Problems command (forced fetch): menu
+// bar commands are unloaded as soon as a menu item is clicked, so a refresh
+// started from the menu itself would be killed before it is stored.
+//
+// Uses Raycast's Cache without a namespace, i.e. shared by all commands of the
+// extension. Preferences are extension-level for the same reason: both commands
+// must build the same query and cache signature.
+
+import { Cache, environment, getPreferenceValues } from "@raycast/api";
+import {
+  liveTransport,
+  listProblems,
+  PROBLEMS_REQUIRED_SCOPES,
+  type ProblemEntry,
+  type TenantConfig,
+} from "../../../sdk";
+import { getActiveTenant } from "../../../services/tenants";
+import { classifyProblemsError, type ProblemsErrorInfo } from "../../lib/problemsError";
+import { shouldFetch } from "../../lib/refreshThrottle";
+import { missingScopesError } from "../../lib/scopeHint";
+
+export const MAX_SHOWN = 7;
+/**
+ * After a failed fetch, retry this soon instead of waiting a full refresh interval.
+ * Equals the manifest wake-up interval (15m): a shorter value could not be honoured.
+ */
+const RETRY_AFTER_ERROR_MS = 15 * 60_000;
+
+export type ProblemsResult =
+  | { state: "no-tenant" }
+  | {
+      state: "ok";
+      endpoint: string;
+      problems: ProblemEntry[];
+      hasMore: boolean;
+      fetchedAt: number;
+      /** What the result was computed for — shown so "no problems" can be checked at a glance. */
+      tenantName: string;
+      extraFilter?: string;
+    }
+  | { state: "error"; endpoint?: string; error: ProblemsErrorInfo };
+
+/** "3", or "7+" when more problems are open than the menu shows. */
+export function problemCountLabel(result: { problems: ProblemEntry[]; hasMore: boolean }): string {
+  return result.hasMore ? `${MAX_SHOWN}+` : String(result.problems.length);
+}
+
+interface Preferences {
+  refreshMinutes?: string;
+  lookback?: string;
+  extraFilter?: string;
+}
+
+const cache = new Cache();
+const LAST_RESULT_KEY = "menubar-problems:last-result";
+const LAST_FETCH_KEY = "menubar-problems:last-fetch";
+const PREFS_KEY = "menubar-problems:prefs";
+/** Bump when the parsing or shape of cached results changes: results cached by older code are then refetched. */
+const CACHE_VERSION = 5;
+const DEFAULT_INTERVAL_MINUTES = 30;
+
+/** The fetch currently running in this process, shared by every loadProblems() call. */
+let inflight: Promise<ProblemsResult> | undefined;
+
+/** Dev-only trace of every menu bar wake-up (visible in the `ray develop` terminal). */
+function debugLog(message: string) {
+  if (environment.isDevelopment)
+    console.log(`[menubar-problems ${new Date().toISOString()} ${environment.launchType}] ${message}`);
+}
+
+const intervalMinutesOf = (prefs: Preferences) => Number(prefs.refreshMinutes) || DEFAULT_INTERVAL_MINUTES;
+
+function readCachedResult(): ProblemsResult | undefined {
+  try {
+    const raw = cache.get(LAST_RESULT_KEY);
+    return raw ? (JSON.parse(raw) as ProblemsResult) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<ProblemsResult> {
+  const endpoint = tenant.tenantEndpoint.replace(/\/$/, "");
+  // Checked locally before the (billable) query: without the scope the query may just return nothing.
+  const scopeError = missingScopesError(tenant, PROBLEMS_REQUIRED_SCOPES);
+  if (scopeError) return { state: "error", endpoint, error: classifyProblemsError(scopeError) };
+  try {
+    // One extra record tells us whether to show "N+".
+    const all = await listProblems(liveTransport, tenant, {
+      limit: MAX_SHOWN + 1,
+      lookback: prefs.lookback || "7d",
+      extraFilter: prefs.extraFilter,
+    });
+    return {
+      state: "ok",
+      endpoint,
+      tenantName: tenant.name,
+      extraFilter: prefs.extraFilter?.trim() || undefined,
+      problems: all.slice(0, MAX_SHOWN),
+      hasMore: all.length > MAX_SHOWN,
+      fetchedAt: Date.now(),
+    };
+  } catch (err) {
+    return { state: "error", endpoint, error: classifyProblemsError(err) };
+  }
+}
+
+/**
+ * Problems result for the active tenant: the cached one while it is fresh, a new
+ * query otherwise. `forced` bypasses the refresh interval (Refresh / Retry).
+ */
+export async function loadProblems(forced: boolean): Promise<ProblemsResult> {
+  const prefs = getPreferenceValues<Preferences>();
+  // Reading the active tenant is local and free; only the Grail query is throttled.
+  const tenant = await getActiveTenant();
+  // "No tenant" is never cached: it must clear as soon as a tenant is added.
+  if (!tenant) return { state: "no-tenant" };
+
+  // Tenant, credentials, scopes, lookback and filter all change what the cached result means.
+  const signature = JSON.stringify([
+    CACHE_VERSION,
+    tenant.id,
+    tenant.tenantEndpoint,
+    tenant.clientId,
+    tenant.ssoEndpoint,
+    [...tenant.scopes].sort(),
+    prefs.lookback,
+    prefs.extraFilter,
+  ]);
+  const signatureChanged = cache.get(PREFS_KEY) !== signature;
+
+  // A fetch already running in this process is shared, never duplicated.
+  if (inflight) {
+    debugLog("join in-flight fetch");
+    return inflight;
+  }
+
+  const last = readCachedResult();
+  const lastFetchedAt = Number(cache.get(LAST_FETCH_KEY)) || undefined;
+  const intervalMinutes = intervalMinutesOf(prefs);
+  const force = forced || signatureChanged;
+  const willFetch = !last || shouldFetch({ now: Date.now(), lastFetchedAt, intervalMinutes, force });
+  debugLog(
+    `${willFetch ? "FETCH" : "SKIP (fresh)"} forced=${forced} signatureChanged=${signatureChanged} ` +
+      `interval=${intervalMinutes}m (pref=${JSON.stringify(prefs.refreshMinutes)}) lastFetch=${lastFetchedAt ? new Date(lastFetchedAt).toISOString() : "never"} ` +
+      `cached=${last ? last.state : "none"}`,
+  );
+  // Every query is billable: reuse the last result until the chosen interval has elapsed.
+  if (last && !willFetch) return last;
+
+  inflight = fetchAndStore(tenant, prefs, signature).finally(() => {
+    inflight = undefined;
+  });
+  return inflight;
+}
+
+async function fetchAndStore(tenant: TenantConfig, prefs: Preferences, signature: string): Promise<ProblemsResult> {
+  const result = await fetchResult(tenant, prefs);
+  debugLog(
+    result.state === "ok"
+      ? `fetched ok: ${result.problems.length} problem(s)${result.hasMore ? "+" : ""}`
+      : `fetched ${result.state}${result.state === "error" ? `: ${result.error.summary}` : ""}`,
+  );
+  // Config errors (scopes, credentials, bad filter) are cached too, so the menu does not
+  // re-query every wake-up while the user has not fixed anything.
+  cache.set(LAST_RESULT_KEY, JSON.stringify(result));
+  // Any failure is re-checked soon: a timeout is transient, and a config error may have been fixed on the
+  // Dynatrace side (e.g. a scope added to the OAuth client) without anything changing locally.
+  const intervalMs = intervalMinutesOf(prefs) * 60_000;
+  const backdate = result.state === "error" ? intervalMs - RETRY_AFTER_ERROR_MS : 0;
+  cache.set(LAST_FETCH_KEY, String(Date.now() - Math.max(0, backdate)));
+  cache.set(PREFS_KEY, signature);
+  return result;
+}

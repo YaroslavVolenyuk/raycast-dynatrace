@@ -2,112 +2,12 @@
 // Problems app. A failed fetch is NEVER shown as "no problems": the icon turns
 // yellow and the menu explains what is wrong and how to fix it.
 
-import {
-  Cache,
-  Clipboard,
-  Color,
-  Icon,
-  LaunchType,
-  MenuBarExtra,
-  getPreferenceValues,
-  launchCommand,
-  open,
-  showHUD,
-} from "@raycast/api";
+import { Clipboard, Color, Icon, LaunchType, MenuBarExtra, launchCommand, open, showHUD } from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
-import { liveTransport, listProblems, type ProblemEntry, type TenantConfig } from "../../../sdk";
-import { getActiveTenant } from "../../../services/tenants";
 import { buildProblemUrl } from "../../lib/deepLinks";
-import { classifyProblemsError, type ProblemsErrorInfo } from "../../lib/problemsError";
-import { shouldFetch } from "../../lib/refreshThrottle";
-
-const MAX_SHOWN = 5;
-/** After a failed fetch, retry this soon instead of waiting a full refresh interval. */
-const RETRY_AFTER_ERROR_MS = 10 * 60_000;
-
-type Result =
-  | { state: "no-tenant" }
-  | { state: "ok"; endpoint: string; problems: ProblemEntry[]; hasMore: boolean }
-  | { state: "error"; endpoint?: string; error: ProblemsErrorInfo };
-
-interface Preferences {
-  refreshMinutes?: string;
-  lookback?: string;
-  extraFilter?: string;
-}
-
-const cache = new Cache();
-const LAST_RESULT_KEY = "menubar-problems:last-result";
-const LAST_FETCH_KEY = "menubar-problems:last-fetch";
-const FORCE_KEY = "menubar-problems:force";
-const PREFS_KEY = "menubar-problems:prefs";
-
-function readCachedResult(): Result | undefined {
-  try {
-    const raw = cache.get(LAST_RESULT_KEY);
-    return raw ? (JSON.parse(raw) as Result) : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<Result> {
-  const endpoint = tenant.tenantEndpoint.replace(/\/$/, "");
-  try {
-    // One extra record tells us whether to show "5+".
-    const all = await listProblems(liveTransport, tenant, {
-      limit: MAX_SHOWN + 1,
-      lookback: prefs.lookback || "7d",
-      extraFilter: prefs.extraFilter,
-    });
-    return { state: "ok", endpoint, problems: all.slice(0, MAX_SHOWN), hasMore: all.length > MAX_SHOWN };
-  } catch (err) {
-    return { state: "error", endpoint, error: classifyProblemsError(err) };
-  }
-}
-
-async function load(): Promise<Result> {
-  const prefs = getPreferenceValues<Preferences>();
-  // Reading the active tenant is local and free; only the Grail query is throttled.
-  const tenant = await getActiveTenant();
-  // "No tenant" is never cached: it must clear as soon as a tenant is added.
-  if (!tenant) return { state: "no-tenant" };
-
-  // Tenant, credentials, scopes, lookback and filter all change what the cached result means.
-  const signature = JSON.stringify([
-    tenant.id,
-    tenant.tenantEndpoint,
-    tenant.clientId,
-    tenant.ssoEndpoint,
-    [...tenant.scopes].sort(),
-    prefs.lookback,
-    prefs.extraFilter,
-  ]);
-  const force = cache.get(FORCE_KEY) === "1" || cache.get(PREFS_KEY) !== signature;
-  cache.remove(FORCE_KEY);
-
-  const last = readCachedResult();
-  const lastFetchedAt = Number(cache.get(LAST_FETCH_KEY)) || undefined;
-  // Every query is billable: reuse the last result until the chosen interval has elapsed.
-  if (
-    last &&
-    !shouldFetch({ now: Date.now(), lastFetchedAt, intervalMinutes: Number(prefs.refreshMinutes) || 30, force })
-  ) {
-    return last;
-  }
-
-  const result = await fetchResult(tenant, prefs);
-  // Config errors (scopes, credentials, bad filter) are cached too, so the menu does not
-  // re-query every wake-up while the user has not fixed anything.
-  cache.set(LAST_RESULT_KEY, JSON.stringify(result));
-  // Any failure is re-checked soon: a timeout is transient, and a config error may have been fixed on the
-  // Dynatrace side (e.g. a scope added to the OAuth client) without anything changing locally.
-  const intervalMs = (Number(prefs.refreshMinutes) || 30) * 60_000;
-  const backdate = result.state === "error" ? intervalMs - RETRY_AFTER_ERROR_MS : 0;
-  cache.set(LAST_FETCH_KEY, String(Date.now() - Math.max(0, backdate)));
-  cache.set(PREFS_KEY, signature);
-  return result;
-}
+import type { ProblemsErrorInfo } from "../../lib/problemsError";
+import { formatClock } from "../../lib/refreshThrottle";
+import { loadProblems, problemCountLabel, type ProblemsResult } from "./problemsStore";
 
 const CATEGORY_ICON: Record<string, { source: Icon; tintColor: Color }> = {
   AVAILABILITY: { source: Icon.CircleProgress, tintColor: Color.Red },
@@ -131,25 +31,35 @@ function describeLoadError(err: unknown): ProblemsErrorInfo {
 
 const openManageTenants = () => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated });
 
+/**
+ * Refresh / Retry. Clicking a menu item closes the menu and Raycast unloads this
+ * command at once, killing any fetch started here; a command cannot relaunch
+ * itself either. The no-view Refresh Problems command runs to completion, stores
+ * the result and then relaunches this one in the background to redraw it. Launched as
+ * user-initiated so it confirms with a HUD that the data was refreshed.
+ */
+const refresh = async () => {
+  try {
+    await launchCommand({ name: "dt-refresh-problems", type: LaunchType.UserInitiated });
+  } catch (err) {
+    // Not copied to the clipboard: a refresh must never overwrite what the user copied.
+    await showHUD(`Could not refresh: ${err instanceof Error ? err.message : String(err)}`);
+  }
+};
+
 export default function MenubarProblems() {
   const {
     data: loaded,
     error: loadError,
     isLoading,
-    revalidate: revalidateRaw,
-  } = useCachedPromise(load, [], {
+  } = useCachedPromise(() => loadProblems(false), [], {
     keepPreviousData: true,
     // A menu bar command cannot show the default failure toast; the error is rendered in the menu instead.
     onError: () => {},
   });
-  /** Manual refresh bypasses the interval throttle. */
-  const revalidate = () => {
-    cache.set(FORCE_KEY, "1");
-    revalidateRaw();
-  };
 
   // load() itself failed (e.g. corrupted tenant storage): never fall back to the previous result.
-  const data: Result | undefined = loadError ? { state: "error", error: describeLoadError(loadError) } : loaded;
+  const data: ProblemsResult | undefined = loadError ? { state: "error", error: describeLoadError(loadError) } : loaded;
 
   if (data?.state === "no-tenant") {
     return (
@@ -158,7 +68,7 @@ export default function MenubarProblems() {
         tooltip="No Dynatrace tenant configured"
       >
         <MenuBarExtra.Item title="Configure Tenant" icon={Icon.Gear} onAction={openManageTenants} />
-        <MenuBarExtra.Item title="Refresh" icon={Icon.RotateClockwise} onAction={() => revalidate()} />
+        <MenuBarExtra.Item title="Refresh" icon={Icon.RotateClockwise} onAction={refresh} />
       </MenuBarExtra>
     );
   }
@@ -175,11 +85,11 @@ export default function MenubarProblems() {
           <MenuBarExtra.Item
             title={error.summary}
             icon={{ source: Icon.Warning, tintColor: Color.Yellow }}
-            onAction={() => revalidate()}
+            onAction={refresh}
           />
         </MenuBarExtra.Section>
         <MenuBarExtra.Section>
-          <MenuBarExtra.Item title="Retry" icon={Icon.RotateClockwise} onAction={() => revalidate()} />
+          <MenuBarExtra.Item title="Retry" icon={Icon.RotateClockwise} onAction={refresh} />
           {error.kind === "config" && (
             <MenuBarExtra.Item title="Open Manage Tenants" icon={Icon.Gear} onAction={openManageTenants} />
           )}
@@ -200,9 +110,9 @@ export default function MenubarProblems() {
   // Still loading the very first time: render nothing visible beyond the spinner.
   if (!data) return <MenuBarExtra isLoading icon={Icon.Globe} tooltip="Loading Dynatrace problems…" />;
 
-  const { problems, hasMore, endpoint } = data;
+  const { problems, endpoint } = data;
   const count = problems.length;
-  const countLabel = hasMore ? `${MAX_SHOWN}+` : String(count);
+  const countLabel = problemCountLabel(data);
 
   return (
     <MenuBarExtra
@@ -216,7 +126,7 @@ export default function MenubarProblems() {
       isLoading={isLoading}
     >
       {count > 0 ? (
-        <MenuBarExtra.Section title="Open Problems">
+        <MenuBarExtra.Section title={data.tenantName ? `Open Problems · ${data.tenantName}` : "Open Problems"}>
           {problems.map((p) => (
             <MenuBarExtra.Item
               key={p.id}
@@ -228,7 +138,12 @@ export default function MenubarProblems() {
           ))}
         </MenuBarExtra.Section>
       ) : (
-        <MenuBarExtra.Item title="No open problems" icon={Icon.Checkmark} />
+        <MenuBarExtra.Item title="No open problems" subtitle={data.tenantName} icon={Icon.Checkmark} />
+      )}
+      {data.extraFilter && (
+        <MenuBarExtra.Section title="Extra DQL Filter (preferences)">
+          <MenuBarExtra.Item title={data.extraFilter} icon={Icon.Filter} />
+        </MenuBarExtra.Section>
       )}
       <MenuBarExtra.Section>
         <MenuBarExtra.Item
@@ -236,7 +151,13 @@ export default function MenubarProblems() {
           icon={Icon.ArrowRight}
           onAction={() => open(`${endpoint}/ui/apps/dynatrace.davis.problems`)}
         />
-        <MenuBarExtra.Item title="Refresh" icon={Icon.RotateClockwise} onAction={() => revalidate()} />
+        <MenuBarExtra.Item
+          title="Refresh"
+          // Data can be up to one refresh interval old by design (each query is billable) — say when it was fetched.
+          subtitle={`updated ${formatClock(data.fetchedAt)}`}
+          icon={Icon.RotateClockwise}
+          onAction={refresh}
+        />
       </MenuBarExtra.Section>
     </MenuBarExtra>
   );

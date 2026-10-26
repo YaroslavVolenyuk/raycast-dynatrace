@@ -24,6 +24,72 @@
     "grail"
   ],
   "license": "MIT",
+  "preferences": [
+    {
+      "name": "refreshMinutes",
+      "type": "dropdown",
+      "title": "Problems in Menu Bar: Refresh Interval",
+      "description": "How often the menu bar queries Dynatrace. Each refresh is a billable DQL query.",
+      "required": false,
+      "default": "30",
+      "data": [
+        {
+          "title": "Every 15 minutes",
+          "value": "15"
+        },
+        {
+          "title": "Every 30 minutes",
+          "value": "30"
+        },
+        {
+          "title": "Every hour",
+          "value": "60"
+        },
+        {
+          "title": "Every 3 hours",
+          "value": "180"
+        },
+        {
+          "title": "Every 6 hours",
+          "value": "360"
+        },
+        {
+          "title": "Every 12 hours",
+          "value": "720"
+        }
+      ]
+    },
+    {
+      "name": "lookback",
+      "type": "dropdown",
+      "title": "Problems in Menu Bar: Look-back Window",
+      "description": "Only problems that were updated within this window are checked. Longer windows scan more data.",
+      "required": false,
+      "default": "7d",
+      "data": [
+        {
+          "title": "Last 24 hours",
+          "value": "1d"
+        },
+        {
+          "title": "Last 7 days",
+          "value": "7d"
+        },
+        {
+          "title": "Last 30 days",
+          "value": "30d"
+        }
+      ]
+    },
+    {
+      "name": "extraFilter",
+      "type": "textfield",
+      "title": "Problems in Menu Bar: Extra DQL Filter",
+      "description": "Optional. A DQL filter expression added to the query, e.g. event.category == \"ERROR\". Do not include 'filter' or '|' (a '|' inside a string literal is rejected too).",
+      "required": false,
+      "placeholder": "event.category == \"ERROR\""
+    }
+  ],
   "commands": [
     {
       "name": "dt-manage-tenants",
@@ -190,59 +256,20 @@
       "description": "Show the number of open Dynatrace problems in the macOS menu bar",
       "mode": "menu-bar",
       "icon": "dynatrace-icon.png",
-      "interval": "10m",
+      "interval": "15m",
       "platforms": [
         "macOS"
-      ],
-      "preferences": [
-        {
-          "name": "refreshMinutes",
-          "type": "dropdown",
-          "title": "Refresh Interval",
-          "description": "How often the menu bar queries Dynatrace. Each refresh is a billable DQL query.",
-          "required": false,
-          "default": "30",
-          "data": [
-            {
-              "title": "Every 30 minutes",
-              "value": "30"
-            },
-            {
-              "title": "Every hour",
-              "value": "60"
-            }
-          ]
-        },
-        {
-          "name": "lookback",
-          "type": "dropdown",
-          "title": "Look-back Window",
-          "description": "Only problems that were updated within this window are checked. Longer windows scan more data.",
-          "required": false,
-          "default": "7d",
-          "data": [
-            {
-              "title": "Last 24 hours",
-              "value": "1d"
-            },
-            {
-              "title": "Last 7 days",
-              "value": "7d"
-            },
-            {
-              "title": "Last 30 days",
-              "value": "30d"
-            }
-          ]
-        },
-        {
-          "name": "extraFilter",
-          "type": "textfield",
-          "title": "Extra DQL Filter",
-          "description": "Optional. A DQL filter expression added to the query, e.g. event.category == \"ERROR\". Do not include 'filter' or '|' (a '|' inside a string literal is rejected too).",
-          "required": false,
-          "placeholder": "event.category == \"ERROR\""
-        }
+      ]
+    },
+    {
+      "name": "dt-refresh-problems",
+      "title": "Refresh Problems",
+      "subtitle": "Dynatrace",
+      "description": "Fetch open Dynatrace problems now and update Problems in Menu Bar",
+      "mode": "no-view",
+      "icon": "dynatrace-icon.png",
+      "platforms": [
+        "macOS"
       ]
     }
   ],
