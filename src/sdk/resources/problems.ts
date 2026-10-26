@@ -25,11 +25,14 @@ export const problemRecordSchema = z
     "event.status": z.string(),
     "event.category": z.string(),
     "event.start": z.string(),
-    "event.end": z.string().nullable().optional(),
-    display_id: z.string().optional(),
-    affected_entity_ids: z.array(z.string()).optional(),
-    affected_entity_names: z.array(z.string()).optional(),
-    "maintenance.is_under_maintenance": z.boolean().optional(),
+    // Empty fields may come back as null or be missing altogether (a generated
+    // custom alert has no affected_entity_* keys). Every optional field must accept
+    // both, or the record is dropped.
+    "event.end": z.string().nullish(),
+    display_id: z.string().nullish(),
+    affected_entity_ids: z.array(z.string()).nullish(),
+    affected_entity_names: z.array(z.string()).nullish(),
+    "maintenance.is_under_maintenance": z.boolean().nullish(),
   })
   .catchall(z.unknown());
 
@@ -54,7 +57,7 @@ export interface ProblemEntry {
 export function normalizeProblem(record: ProblemRecord): ProblemEntry {
   return {
     id: record["event.id"],
-    displayId: record.display_id,
+    displayId: record.display_id ?? undefined,
     name: record["event.name"],
     category: record["event.category"],
     isOpen: record["event.status"] !== "CLOSED",
@@ -126,9 +129,15 @@ export async function listProblems(
   });
 
   const entries: ProblemEntry[] = [];
+  let firstIssue: string | undefined;
   for (const record of records) {
     const parsed = problemRecordSchema.safeParse(record);
     if (parsed.success) entries.push(normalizeProblem(parsed.data));
+    else firstIssue ??= parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
+  }
+  // Problems exist but none could be read: that must surface as an error, never as "no problems".
+  if (records.length > 0 && entries.length === 0) {
+    throw new Error(`Unexpected problem record format (${firstIssue ?? "unknown"})`);
   }
   return entries;
 }

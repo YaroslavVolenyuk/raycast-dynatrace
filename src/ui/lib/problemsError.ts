@@ -40,6 +40,9 @@ export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
   if (/\(code 4\d\d\)/.test(detail)) {
     return { kind: "config", summary: "Query rejected — check Extra DQL Filter in preferences", detail };
   }
+  if (/unexpected problem record format/i.test(detail)) {
+    return { kind: "transient", summary: "Unexpected data from Dynatrace — copy error details", detail };
+  }
   if (/timeout|not responding|did not finish/i.test(detail)) {
     return { kind: "transient", summary: "Dynatrace is not responding", detail };
   }

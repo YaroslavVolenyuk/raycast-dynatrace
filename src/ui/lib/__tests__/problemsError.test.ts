@@ -41,3 +41,10 @@ describe("classifyProblemsError — environment URL", () => {
     expect(r.kind).toBe("config");
   });
 });
+
+describe("classifyProblemsError — unreadable records", () => {
+  it("does not blame the network for records it could not parse", () => {
+    const r = classifyProblemsError(new Error("Unexpected problem record format (event.name: expected string)"));
+    expect(r.summary).toContain("Unexpected data");
+  });
+});
