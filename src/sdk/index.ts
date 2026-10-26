@@ -7,7 +7,7 @@
  *
  * Sub-modules:
  *   - auth/      OAuth client-credentials, token cache, TenantConfig
- *   - grail/     DQL execution + escapeDqlString
+ *   - grail/     DQL execution, verify/autocomplete, escapeDqlString
  *   - resources/ one module per resource (logs, spans)
  */
 export {
@@ -25,6 +25,13 @@ export {
   testTenantConnection,
   type GrailQueryOptions,
   type ConnectionTestResult,
+  verifyDql,
+  autocompleteDql,
+  applySuggestion,
+  type DqlIssue,
+  type DqlVerification,
+  type DqlSuggestion,
+  type DqlCompletion,
 } from "./grail";
 export { type DynatraceTransport, liveTransport } from "./transport";
 export * from "./resources";

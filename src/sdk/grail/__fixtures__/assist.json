@@ -1,0 +1,587 @@
+{
+  "verifyValid": {
+    "valid": true,
+    "notifications": []
+  },
+  "verifyInvalid": {
+    "valid": false,
+    "notifications": [
+      {
+        "arguments": ["filtr"],
+        "message": "There's no command `filtr`.",
+        "messageFormat": "There's no command `%1$s`.",
+        "messageFormatSpecifierTypes": ["INPUT_QUERY_PART"],
+        "notificationType": "UNKNOWN_COMMAND",
+        "severity": "ERROR",
+        "syntaxPosition": {
+          "start": {
+            "column": 3,
+            "index": 13,
+            "line": 2
+          },
+          "end": {
+            "column": 7,
+            "index": 17,
+            "line": 2
+          }
+        }
+      }
+    ]
+  },
+  "autocompleteCommand": {
+    "optional": false,
+    "suggestions": [
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fields",
+            "info": "Keeps only the specified fields.",
+            "synopsis": "fields expression, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fields "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsAdd",
+            "info": "Evaluates an expression and appends or replaces a field.",
+            "synopsis": "fieldsAdd expression, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsAdd "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsFlatten",
+            "info": "Adds fields from a record to the current record list.",
+            "synopsis": "fieldsFlatten expression [, prefix] [, fields: { [field, …] }] [, depth]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsFlatten "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsKeep",
+            "info": "Keeps the fields in the result.",
+            "synopsis": "fieldsKeep field, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsKeep "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsMove",
+            "info": "Moves fields matching a pattern into a new nested record.",
+            "synopsis": "fieldsMove fieldName [, include: pattern, …] [, exclude: pattern, …]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsMove "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsRemove",
+            "info": "Removes fields from the result.",
+            "synopsis": "fieldsRemove field, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsRemove "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsRename",
+            "info": "Renames a field.",
+            "synopsis": "fieldsRename field, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsRename "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsSummary",
+            "info": "Calculates the facets for the listed fields.",
+            "synopsis": "fieldsSummary [topValues] [, extrapolateSamples ,] field, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "fieldsSummary "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "filter",
+            "info": "Reduces the number of records in a list by excluding all records not matching a specific condition.",
+            "synopsis": "filter condition"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "filter "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "filterOut",
+            "info": "Removes records that match a specific condition.",
+            "synopsis": "filterOut condition"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 2,
+        "suggestion": "filterOut "
+      }
+    ]
+  },
+  "autocompleteFilter": {
+    "optional": false,
+    "suggestions": [
+      {
+        "parts": [
+          {
+            "type": "PARAMETER_KEY",
+            "suggestion": "",
+            "info": "The condition all records have to fulfill."
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": ""
+      },
+      {
+        "parts": [
+          {
+            "type": "SYNOPSIS_INFO",
+            "suggestion": "",
+            "currentParameterKey": "condition",
+            "info": "Reduces the number of records in a list by excluding all records not matching a specific condition.",
+            "reference": "filter",
+            "referenceType": "COMMAND_NAME",
+            "synopsis": "filter condition"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": ""
+      },
+      {
+        "parts": [
+          {
+            "type": "FIELD_NAME",
+            "suggestion": "content",
+            "category": "field_known",
+            "dataType": "string"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "content"
+      },
+      {
+        "parts": [
+          {
+            "type": "FIELD_NAME",
+            "suggestion": "dt.system.bucket",
+            "category": "field_known",
+            "dataType": "string"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "dt.system.bucket"
+      },
+      {
+        "parts": [
+          {
+            "type": "FIELD_NAME",
+            "suggestion": "dt.system.sampling_ratio",
+            "category": "field_known",
+            "dataType": "number"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "dt.system.sampling_ratio"
+      },
+      {
+        "parts": [
+          {
+            "type": "FIELD_NAME",
+            "suggestion": "ordinal",
+            "category": "field_known",
+            "dataType": "number"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "ordinal"
+      },
+      {
+        "parts": [
+          {
+            "type": "FIELD_NAME",
+            "suggestion": "timestamp",
+            "category": "field_known",
+            "dataType": "timestamp"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "timestamp"
+      },
+      {
+        "parts": [
+          {
+            "type": "FIELD_NAME",
+            "suggestion": "",
+            "info": "some custom field"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": ""
+      },
+      {
+        "parts": [
+          {
+            "type": "OPERATOR",
+            "suggestion": "not"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "not "
+      },
+      {
+        "parts": [
+          {
+            "type": "BOOLEAN_TRUE",
+            "suggestion": "true"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "true "
+      },
+      {
+        "parts": [
+          {
+            "type": "BOOLEAN_FALSE",
+            "suggestion": "false"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "false "
+      },
+      {
+        "parts": [
+          {
+            "type": "OPERATOR",
+            "suggestion": "-"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "-"
+      },
+      {
+        "parts": [
+          {
+            "type": "OPERATOR",
+            "suggestion": "@"
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "@"
+      },
+      {
+        "parts": [
+          {
+            "type": "PARENTHESIS_OPEN",
+            "suggestion": "("
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "("
+      },
+      {
+        "parts": [
+          {
+            "type": "FUNCTION_NAME",
+            "suggestion": "abs",
+            "info": "Returns the absolute value of a numeric expression.",
+            "synopsis": "abs(expression)"
+          },
+          {
+            "type": "PARENTHESIS_OPEN",
+            "suggestion": "("
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "abs("
+      },
+      {
+        "parts": [
+          {
+            "type": "FUNCTION_NAME",
+            "suggestion": "acos",
+            "info": "Calculate the acos of the given expression as an angle in radians.",
+            "synopsis": "acos(expression)"
+          },
+          {
+            "type": "PARENTHESIS_OPEN",
+            "suggestion": "("
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "acos("
+      },
+      {
+        "parts": [
+          {
+            "type": "FUNCTION_NAME",
+            "suggestion": "array",
+            "info": "Creates an `array` from the list of given parameters.",
+            "synopsis": "array(expression, …)"
+          },
+          {
+            "type": "PARENTHESIS_OPEN",
+            "suggestion": "("
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "array("
+      }
+    ]
+  },
+  "autocompleteEmpty": {
+    "optional": false,
+    "suggestions": [
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fetch",
+            "info": "Loads data from the resource.",
+            "priority": 100,
+            "synopsis": "fetch dataObject [, bucket: name, …] [, from] [, to] [, timeframe] [, samplingRatio] [, scanLimitGBytes]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "fetch "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "timeseries",
+            "info": "Reads metrics in the time series format from the data source.",
+            "priority": 90,
+            "synopsis": "timeseries [bucket: name, …] [, from] [, to] [, timeframe] [, by: { [expression, …] }] [, filter] [, interval] [, bins] [, shift] [, nonempty] [, union ,] metric, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "timeseries "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "smartscapeNodes",
+            "info": "Returns the nodes of a smartscape graph.",
+            "priority": 80,
+            "synopsis": "smartscapeNodes [from] [, to] [, timeframe ,] type, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "smartscapeNodes "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "smartscapeEdges",
+            "info": "Returns the edges of a smartscape graph.",
+            "priority": 70,
+            "synopsis": "smartscapeEdges [from] [, to] [, timeframe ,] type, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "smartscapeEdges "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "data",
+            "info": "Creates a static dataset to work with.",
+            "synopsis": "data [json ,] record, …"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "data "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "describe",
+            "info": "Describes the schema of a given data object.",
+            "synopsis": "describe dataObject"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "describe "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "fieldsSnapshot",
+            "info": "Loads a fields snapshot for a data source.",
+            "synopsis": "fieldsSnapshot dataObject [, by: { [field, …] }] [, bucket: name, …]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "fieldsSnapshot "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "internalLoadDss",
+            "info": "Loads a dynamic schema snapshot for a data source.",
+            "synopsis": "internalLoadDss dataObject [, bucket: name, …]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "internalLoadDss "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "load",
+            "info": "Load command to read tabular file stored by Save command.",
+            "synopsis": "load tabularFile [, offset]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "load "
+      },
+      {
+        "parts": [
+          {
+            "type": "COMMAND_NAME",
+            "suggestion": "metrics",
+            "info": "Loads metric data.",
+            "synopsis": "metrics [[bucket: name, …] [, from] [, to] [, timeframe]]"
+          },
+          {
+            "type": "SPACE",
+            "suggestion": " "
+          }
+        ],
+        "alreadyTypedCharacters": 0,
+        "suggestion": "metrics "
+      }
+    ]
+  }
+}
