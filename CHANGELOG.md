@@ -23,6 +23,8 @@ working with a Dynatrace environment from Raycast.
   custom range (up to 1,000 records, as in Dynatrace); browse results with a details panel, filter them, and
   copy one record or all of them as JSON or CSV. Opens with the last query and timeframe,
   and log details can hand their DQL filter over to it.
+  Syntax errors show while typing, ⌘. suggests the next command, function or
+  field, and ⌘T inserts a starter query.
 - **Problems in Menu Bar** (macOS) — show the number of open Davis problems
   in the menu bar and open any of them in the Dynatrace Problems app.
   Configurable refresh interval (15 min to 12 h), look-back window and an

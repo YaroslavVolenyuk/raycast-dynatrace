@@ -43,8 +43,16 @@ takes precedence. Like Dynatrace, results are capped at 1,000 records; add
 `| limit` to the query for fewer. Results are listed with a
 title column picked from the data, a filter over all fields, a details panel
 (⌘D), and copy actions for one record (JSON) or all records (JSON or CSV).
-The last query and timeframe are restored the next time the command opens. From a log
-detail, ⌘⇧D opens its DQL filter in Run DQL.
+The last query and timeframe are restored the next time the command opens.
+From a log detail, ⌘⇧D opens its DQL filter in Run DQL.
+
+Writing the query is assisted the way the Dynatrace editor does it:
+
+- syntax errors appear under the Query field while you type (checked with
+  Grail's `query:verify`, which does not run the query or use query budget);
+- ⌘. lists what can come next at the end of the query — commands, functions,
+  fields of the data you fetch — from Grail's `query:autocomplete`;
+- ⌘T inserts a starter query (error logs, failed requests, open problems, …).
 
 Run DQL needs `storage:buckets:read` plus the read scope for whatever the
 query fetches (for example `storage:logs:read` for `fetch logs`).

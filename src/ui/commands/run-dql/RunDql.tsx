@@ -5,6 +5,7 @@ import { getLastDqlQuery, getLastDqlTimeframe, setLastDqlQuery, setLastDqlTimefr
 import { useActiveTenant } from "../../hooks";
 import DqlResults from "./DqlResults";
 import SuggestList from "./SuggestList";
+import TemplateList from "./TemplateList";
 import { useDqlVerification } from "./useDqlVerification";
 import { DEFAULT_TIMEFRAME, TIMEFRAME_PRESETS } from "./timeframes";
 
@@ -126,6 +127,12 @@ export default function RunDql(
             />
           )}
           <Action
+            title="Insert Template…"
+            icon={Icon.Code}
+            shortcut={{ modifiers: ["cmd"], key: "t" }}
+            onAction={() => push(<TemplateList currentQuery={dql} onPick={setDql} />)}
+          />
+          <Action
             title="Clear Query"
             icon={Icon.Trash}
             shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
@@ -172,7 +179,7 @@ export default function RunDql(
         id="dql"
         title="Query"
         placeholder={'fetch logs\n// Add filters by: | filter matchesValue(field, "value")\n| sort timestamp desc'}
-        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer. ⌘. suggests what can come next."
+        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer. ⌘. suggests what can come next, ⌘T inserts a template."
         value={dql}
         error={dqlError ?? syntaxError}
         onChange={(v) => {
