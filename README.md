@@ -34,6 +34,21 @@ Search Grail spans. Filter by timeframe, span status, or trace ID. Selecting
 a span opens a detail view, with a deep link into the Dynatrace Distributed
 Tracing explorer for the corresponding trace.
 
+### Run DQL
+
+Run any DQL query against the active (or a chosen) tenant, as in the
+Dynatrace Logs/Notebooks editor. Pick a timeframe from the same presets as
+the Dynatrace picker or a custom range — a `from:` / `to:` inside the query
+takes precedence. Like Dynatrace, results are capped at 1,000 records; add
+`| limit` to the query for fewer. Results are listed with a
+title column picked from the data, a filter over all fields, a details panel
+(⌘D), and copy actions for one record (JSON) or all records (JSON or CSV).
+The last query and timeframe are restored the next time the command opens. From a log
+detail, ⌘⇧D opens its DQL filter in Run DQL.
+
+Run DQL needs `storage:buckets:read` plus the read scope for whatever the
+query fetches (for example `storage:logs:read` for `fetch logs`).
+
 ## Setup
 
 1. In Dynatrace, go to **Account Management → Identity & access management →

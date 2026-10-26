@@ -6,7 +6,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Initial Version] - {PR_MERGE_DATE}
 
-Initial release of the Dynatrace extension, with five commands for
+Initial release of the Dynatrace extension, with six commands for
 working with a Dynatrace environment from Raycast.
 
 ### Added
@@ -19,6 +19,10 @@ working with a Dynatrace environment from Raycast.
 - **Search Traces** — search Grail spans, filter by timeframe, span status,
   and trace ID, and open a detail view with a deep link into the
   Dynatrace Distributed Tracing explorer.
+- **Run DQL** — run any DQL query with the Dynatrace timeframe presets or a
+  custom range (up to 1,000 records, as in Dynatrace); browse results with a details panel, filter them, and
+  copy one record or all of them as JSON or CSV. Opens with the last query and timeframe,
+  and log details can hand their DQL filter over to it.
 - **Problems in Menu Bar** (macOS) — show the number of open Davis problems
   in the menu bar and open any of them in the Dynatrace Problems app.
   Configurable refresh interval (15 min to 12 h), look-back window and an

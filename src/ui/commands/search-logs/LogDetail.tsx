@@ -5,6 +5,7 @@ import { escapeDqlString } from "../../../sdk";
 import { formatLogContent } from "../../lib/formatLogContent";
 import { buildTraceUrl } from "../../lib/deepLinks";
 import SearchTraces from "../search-traces/SearchTraces";
+import RunDql from "../run-dql/RunDql";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -247,6 +248,12 @@ export default function LogDetail({ entry, tenant }: { entry: LogEntry; tenant?:
               shortcut={{ modifiers: ["cmd", "shift"], key: "o" }}
             />
           )}
+          <Action
+            title="Open DQL Filter in Run DQL"
+            icon={Icon.Terminal}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "d" }}
+            onAction={() => push(<RunDql initialQuery={dqlFilter} />)}
+          />
           <Action.CopyToClipboard
             title="Copy DQL Filter"
             content={dqlFilter}

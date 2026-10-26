@@ -2,7 +2,7 @@
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "dynatrace",
   "title": "Dynatrace Connector",
-  "description": "Search logs and traces in Dynatrace Grail and manage multiple tenants — without leaving your keyboard.",
+  "description": "Search logs and traces, run DQL queries in Dynatrace Grail and manage multiple tenants — without leaving your keyboard.",
   "icon": "dynatrace-icon.png",
   "author": "yaroslav_volenyuk",
   "platforms": [
@@ -248,6 +248,14 @@
           "required": false
         }
       ]
+    },
+    {
+      "name": "dt-run-dql",
+      "title": "Run DQL",
+      "subtitle": "Dynatrace",
+      "description": "Run any DQL query against Grail and browse, filter and copy the results",
+      "mode": "view",
+      "icon": "dynatrace-icon.png"
     },
     {
       "name": "dt-menubar-problems",

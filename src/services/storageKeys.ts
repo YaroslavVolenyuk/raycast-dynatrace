@@ -5,4 +5,8 @@ export const StorageKeys = {
   // Tenant management
   tenants: "tenants:v1",
   tenantsActive: "tenants:active",
+
+  // Run DQL
+  dqlLastQuery: "dql:last-query",
+  dqlLastTimeframe: "dql:last-timeframe",
 } as const;

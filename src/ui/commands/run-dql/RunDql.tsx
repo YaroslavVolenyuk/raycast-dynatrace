@@ -1,0 +1,169 @@
+import { Form, ActionPanel, Action, Icon, LaunchType, launchCommand, useNavigation } from "@raycast/api";
+import type { LaunchProps } from "@raycast/api";
+import { useEffect, useState } from "react";
+import { getLastDqlQuery, getLastDqlTimeframe, setLastDqlQuery, setLastDqlTimeframe } from "../../../services";
+import { useActiveTenant } from "../../hooks";
+import DqlResults from "./DqlResults";
+import { DEFAULT_TIMEFRAME, TIMEFRAME_PRESETS } from "./timeframes";
+
+interface RunDqlLaunchContext {
+  /** Query to open the form with, e.g. from another command or a quicklink. */
+  dql?: string;
+}
+
+interface FormValues {
+  tenantId?: string;
+  dql: string;
+  timeframe: string;
+  customFrom?: Date | null;
+  customTo?: Date | null;
+}
+
+/**
+ * Run DQL — can be launched as a top-level command (reads `launchContext.dql`)
+ * or pushed from another view with `initialQuery` (e.g. from a log detail).
+ */
+export default function RunDql(
+  props: Partial<LaunchProps<{ launchContext: RunDqlLaunchContext }>> & { initialQuery?: string },
+) {
+  const presetQuery = props.initialQuery ?? props.launchContext?.dql;
+
+  const { push } = useNavigation();
+  const { tenant, tenants, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
+
+  const [dql, setDql] = useState(presetQuery ?? "");
+  const [dqlError, setDqlError] = useState<string | undefined>();
+  const [historyLoading, setHistoryLoading] = useState(!presetQuery);
+  const [tenantId, setTenantId] = useState<string>("");
+  const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
+  const [rangeError, setRangeError] = useState<string | undefined>();
+
+  // Restore the last timeframe, and the last query unless the command was opened with one.
+  useEffect(() => {
+    getLastDqlTimeframe()
+      .then((last) => last && TIMEFRAME_PRESETS.some((p) => p.value === last) && setTimeframe(last))
+      .catch(() => undefined);
+    if (presetQuery) return;
+    getLastDqlQuery()
+      .then((last) => last && setDql((current) => current || last))
+      .catch(() => undefined) // a missing history is not worth an error
+      .finally(() => setHistoryLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (tenant && !tenantId) setTenantId(tenant.id);
+  }, [tenant]);
+
+  function handleSubmit(values: FormValues) {
+    const query = values.dql.trim();
+    if (!query) {
+      setDqlError("Enter a DQL query");
+      return;
+    }
+    const selected = tenants.find((t) => t.id === (values.tenantId ?? tenantId)) ?? tenant;
+    if (!selected) return;
+
+    let timeframeKey = values.timeframe;
+    if (values.timeframe === "custom") {
+      if (!values.customFrom || !values.customTo || values.customFrom >= values.customTo) {
+        setRangeError("Pick a start before the end");
+        return;
+      }
+      timeframeKey = `${values.customFrom.toISOString()}|${values.customTo.toISOString()}`;
+    }
+
+    void setLastDqlQuery(query).catch(() => undefined);
+    if (values.timeframe !== "custom") void setLastDqlTimeframe(values.timeframe).catch(() => undefined);
+    push(<DqlResults tenant={selected} query={query} timeframeKey={timeframeKey} />);
+  }
+
+  if (tenantError) {
+    return (
+      <Form>
+        <Form.Description title="Could Not Load Tenants" text={tenantError} />
+      </Form>
+    );
+  }
+
+  if (!tenantLoading && !tenant) {
+    return (
+      <Form
+        actions={
+          <ActionPanel>
+            <Action
+              title="Open Manage Tenants"
+              icon={Icon.Globe}
+              onAction={() => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated })}
+            />
+          </ActionPanel>
+        }
+      >
+        <Form.Description title="No Tenant Configured" text="Add a Dynatrace tenant via Manage Tenants first." />
+      </Form>
+    );
+  }
+
+  return (
+    <Form
+      isLoading={tenantLoading || historyLoading}
+      actions={
+        <ActionPanel>
+          <Action.SubmitForm title="Run Query" icon={Icon.Play} onSubmit={handleSubmit} />
+          <Action
+            title="Clear Query"
+            icon={Icon.Trash}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
+            onAction={() => setDql("")}
+          />
+        </ActionPanel>
+      }
+    >
+      {tenants.length > 1 && (
+        <Form.Dropdown id="tenantId" title="Tenant" value={tenantId} onChange={setTenantId}>
+          {tenants.map((t) => (
+            <Form.Dropdown.Item key={t.id} value={t.id} title={t.name} />
+          ))}
+        </Form.Dropdown>
+      )}
+
+      <Form.Dropdown
+        id="timeframe"
+        title="Timeframe"
+        value={timeframe}
+        onChange={(v) => {
+          setTimeframe(v);
+          setRangeError(undefined);
+        }}
+      >
+        <Form.Dropdown.Section>
+          {TIMEFRAME_PRESETS.map((p) => (
+            <Form.Dropdown.Item key={p.value} value={p.value} title={p.title} />
+          ))}
+        </Form.Dropdown.Section>
+        <Form.Dropdown.Section>
+          <Form.Dropdown.Item value="custom" title="Custom Range…" />
+        </Form.Dropdown.Section>
+      </Form.Dropdown>
+
+      {timeframe === "custom" && (
+        <>
+          <Form.DatePicker id="customFrom" title="From" error={rangeError} onChange={() => setRangeError(undefined)} />
+          <Form.DatePicker id="customTo" title="To" onChange={() => setRangeError(undefined)} />
+        </>
+      )}
+
+      <Form.TextArea
+        id="dql"
+        title="Query"
+        placeholder={'fetch logs\n// Add filters by: | filter matchesValue(field, "value")\n| sort timestamp desc'}
+        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer."
+        value={dql}
+        error={dqlError}
+        onChange={(v) => {
+          setDql(v);
+          if (dqlError && v.trim()) setDqlError(undefined);
+        }}
+      />
+    </Form>
+  );
+}

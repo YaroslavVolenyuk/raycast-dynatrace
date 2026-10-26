@@ -45,3 +45,12 @@ export {
   type ProblemEntry,
   type ListProblemsOptions,
 } from "./problems";
+
+export {
+  runDql,
+  collectColumns,
+  DQL_DEFAULT_LIMIT,
+  DQL_REQUIRED_SCOPES,
+  type DqlResult,
+  type RunDqlOptions,
+} from "./dql";
