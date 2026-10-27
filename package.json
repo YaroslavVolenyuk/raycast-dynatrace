@@ -6,8 +6,7 @@
   "icon": "dynatrace-icon.png",
   "author": "yaroslav_volenyuk",
   "platforms": [
-    "macOS",
-    "Windows"
+    "macOS"
   ],
   "categories": [
     "Developer Tools",
