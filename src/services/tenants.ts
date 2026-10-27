@@ -1,8 +1,9 @@
 // CRUD operations for Dynatrace tenant configurations + active-tenant state.
 //
-// Data is stored in Raycast LocalStorage (Raycast's encrypted local
-// database, machine-local, not synced). Access tokens are held in-memory only
-// (see sdk/auth) and never written to disk. Never pass tenants through
+// Every tenant — platform token or OAuth client — is added in Manage Tenants
+// and stored in Raycast LocalStorage (Raycast's encrypted local database,
+// machine-local, not synced). Access tokens are held in-memory only (see
+// sdk/auth) and never written to disk. Never pass tenants through
 // useCachedPromise / Cache: that store is unencrypted files.
 
 import { LocalStorage } from "@raycast/api";
@@ -12,17 +13,26 @@ import { StorageKeys } from "./storageKeys";
 
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
-const tenantConfigSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  tenantEndpoint: z.string().url(),
-  clientId: z.string().min(1),
-  clientSecret: z.string().min(1),
-  ssoEndpoint: z.string().url(),
-  scopes: z.array(z.string()),
-  // NOTE: legacy stored tenants may carry extra keys (e.g. useClassicProxy);
-  // z.object strips unknown keys, so they are dropped harmlessly on read.
-});
+const tenantConfigSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    tenantEndpoint: z.string().url(),
+    // Empty for a platform-token tenant.
+    clientId: z.string(),
+    clientSecret: z.string(),
+    ssoEndpoint: z.string(),
+    scopes: z.array(z.string()),
+    platformToken: z.string().min(1).optional(),
+    // NOTE: legacy stored tenants may carry extra keys (e.g. useClassicProxy);
+    // z.object strips unknown keys, so they are dropped harmlessly on read.
+  })
+  .refine(
+    (t) =>
+      t.platformToken !== undefined ||
+      (t.clientId.length > 0 && t.clientSecret.length > 0 && z.string().url().safeParse(t.ssoEndpoint).success),
+    { message: "A tenant needs a platform token or a complete OAuth client" },
+  );
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,23 +66,34 @@ async function readStore(): Promise<StoredTenants> {
   return store;
 }
 
-async function readAll(): Promise<TenantConfig[]> {
-  return (await readStore()).tenants;
-}
-
 async function writeAll(tenants: TenantConfig[], unreadable: unknown[]): Promise<void> {
   await LocalStorage.setItem(StorageKeys.tenants, JSON.stringify([...tenants, ...unreadable]));
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function listTenants(): Promise<TenantConfig[]> {
-  return readAll();
+export interface TenantState {
+  tenants: TenantConfig[];
+  active: TenantConfig | null;
+  /** Stored entries that could not be read. They are kept until Reset Tenants. */
+  unreadable: number;
 }
 
-/** Number of stored entries that could not be read. They are kept until Reset Tenants. */
-export async function countUnreadableTenants(): Promise<number> {
-  return (await readStore()).unreadable.length;
+/** Everything Manage Tenants shows, from one read of the storage. */
+export async function readTenantState(): Promise<TenantState> {
+  const { tenants, unreadable } = await readStore();
+  const activeId = await LocalStorage.getItem<string>(StorageKeys.tenantsActive);
+  return {
+    tenants,
+    // No (valid) active selection while tenants exist: fall back to the first one.
+    // Leaving none active made every command claim "no tenant" with tenants present.
+    active: tenants.find((t) => t.id === activeId) ?? tenants[0] ?? null,
+    unreadable: unreadable.length,
+  };
+}
+
+export async function listTenants(): Promise<TenantConfig[]> {
+  return (await readTenantState()).tenants;
 }
 
 export async function saveTenant(tenant: TenantConfig): Promise<void> {
@@ -105,19 +126,12 @@ export async function deleteTenant(id: string): Promise<void> {
 }
 
 export async function getActiveTenant(): Promise<TenantConfig | null> {
-  const tenants = await listTenants();
-  if (tenants.length === 0) return null;
-
-  const activeId = await LocalStorage.getItem<string>(StorageKeys.tenantsActive);
-  if (activeId) {
-    const found = tenants.find((t) => t.id === activeId);
-    if (found) return found;
+  const { active } = await readTenantState();
+  // Persist the fallback so the active tenant does not change when tenants are added later.
+  if (active && (await LocalStorage.getItem<string>(StorageKeys.tenantsActive)) !== active.id) {
+    await LocalStorage.setItem(StorageKeys.tenantsActive, active.id);
   }
-
-  // No (valid) active selection while tenants exist: fall back to the first one.
-  // Leaving none active made every command claim "no tenant" with tenants present.
-  await LocalStorage.setItem(StorageKeys.tenantsActive, tenants[0].id);
-  return tenants[0];
+  return active;
 }
 
 /** Removes every stored tenant and the active selection. The way out of corrupted storage. */

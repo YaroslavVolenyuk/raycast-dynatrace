@@ -12,6 +12,6 @@ export {
   getActiveTenant,
   setActiveTenant,
   resetTenants,
-  countUnreadableTenants,
+  readTenantState,
 } from "./tenants";
 export { getLastDqlQuery, setLastDqlQuery, getLastDqlTimeframe, setLastDqlTimeframe } from "./dqlHistory";

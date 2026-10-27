@@ -1,8 +1,10 @@
-import { Form, ActionPanel, Action, Icon, LaunchType, launchCommand, useNavigation } from "@raycast/api";
+import { Form, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
 import type { LaunchProps } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { getLastDqlQuery, getLastDqlTimeframe, setLastDqlQuery, setLastDqlTimeframe } from "../../../services";
 import { useActiveTenant } from "../../hooks";
+import { ManageTenantsAction } from "../../components/TenantActions";
+import TenantForm from "../tenants/TenantForm";
 import DqlResults from "./DqlResults";
 import SuggestList from "./SuggestList";
 import TemplateList from "./TemplateList";
@@ -32,12 +34,13 @@ export default function RunDql(
   const presetQuery = props.initialQuery ?? props.launchContext?.dql;
 
   const { push } = useNavigation();
-  const { tenant, tenants, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
+  const { tenant, tenants, isLoading: tenantLoading, error: tenantError, reload: reloadTenants } = useActiveTenant();
 
   const [dql, setDql] = useState(presetQuery ?? "");
   const [dqlError, setDqlError] = useState<string | undefined>();
   const [historyLoading, setHistoryLoading] = useState(!presetQuery);
-  const [tenantId, setTenantId] = useState<string>("");
+  /** A tenant other than the active one, picked in the dropdown; undefined follows the active tenant. */
+  const [pickedTenantId, setPickedTenantId] = useState<string>();
   const [timeframe, setTimeframe] = useState(DEFAULT_TIMEFRAME);
   const [rangeError, setRangeError] = useState<string | undefined>();
 
@@ -53,9 +56,9 @@ export default function RunDql(
       .finally(() => setHistoryLoading(false));
   }, []);
 
-  useEffect(() => {
-    if (tenant && !tenantId) setTenantId(tenant.id);
-  }, [tenant]);
+  // Follow the active tenant (also after a switch in Manage Tenants…) until the user
+  // picks another one; fall back to it when the picked tenant was deleted.
+  const tenantId = pickedTenantId && tenants.some((t) => t.id === pickedTenantId) ? pickedTenantId : (tenant?.id ?? "");
 
   const selectedTenant = tenants.find((t) => t.id === tenantId) ?? tenant;
   const verification = useDqlVerification(selectedTenant, dql);
@@ -88,7 +91,13 @@ export default function RunDql(
 
   if (tenantError) {
     return (
-      <Form>
+      <Form
+        actions={
+          <ActionPanel>
+            <ManageTenantsAction onChanged={reloadTenants} />
+          </ActionPanel>
+        }
+      >
         <Form.Description title="Could Not Load Tenants" text={tenantError} />
       </Form>
     );
@@ -99,15 +108,15 @@ export default function RunDql(
       <Form
         actions={
           <ActionPanel>
-            <Action
-              title="Open Manage Tenants"
-              icon={Icon.Globe}
-              onAction={() => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated })}
-            />
+            <Action title="Add Tenant" icon={Icon.Plus} onAction={() => push(<TenantForm onSaved={reloadTenants} />)} />
+            <ManageTenantsAction onChanged={reloadTenants} />
           </ActionPanel>
         }
       >
-        <Form.Description title="No Tenant Configured" text="Add a Dynatrace tenant via Manage Tenants first." />
+        <Form.Description
+          title="No Tenant Configured"
+          text="Add a Dynatrace environment with a platform token or an OAuth client."
+        />
       </Form>
     );
   }
@@ -138,11 +147,18 @@ export default function RunDql(
             shortcut={{ modifiers: ["cmd", "shift"], key: "backspace" }}
             onAction={() => setDql("")}
           />
+          <ManageTenantsAction onChanged={reloadTenants} />
         </ActionPanel>
       }
     >
       {tenants.length > 1 && (
-        <Form.Dropdown id="tenantId" title="Tenant" value={tenantId} onChange={setTenantId}>
+        <Form.Dropdown
+          id="tenantId"
+          title="Tenant"
+          value={tenantId}
+          // Also called with the initial value on mount: picking the active tenant is not a choice to stick to.
+          onChange={(id) => setPickedTenantId(id === tenant?.id ? undefined : id)}
+        >
           {tenants.map((t) => (
             <Form.Dropdown.Item key={t.id} value={t.id} title={t.name} />
           ))}

@@ -137,6 +137,23 @@ describe("HTTP error responses", () => {
     );
   });
 
+  it("names the platform token on 403 for a token tenant", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403, text: async () => "forbidden" });
+
+    await expect(executeDqlQuery({ ...TENANT, platformToken: "dt0s16.X" }, "fetch logs")).rejects.toThrow(
+      /platform token is missing required scopes.*Manage Tenants/,
+    );
+  });
+
+  it("does not retry a 401 for a platform token: the same token would be sent again", async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401, text: async () => "" });
+
+    await expect(executeDqlQuery({ ...TENANT, platformToken: "dt0s16.X" }, "fetch logs")).rejects.toThrow(
+      /platform token was rejected/,
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it("uses error.message from JSON body on non-ok", async () => {
     const body = { error: { code: 400, message: "Invalid DQL syntax at position 5" } };
     mockFetch.mockResolvedValueOnce(grailError(400, body));

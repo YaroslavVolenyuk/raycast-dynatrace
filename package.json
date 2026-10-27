@@ -1,8 +1,8 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
   "name": "dynatrace",
-  "title": "Dynatrace Connector",
-  "description": "Search logs and traces, run DQL queries in Dynatrace Grail and manage multiple tenants — without leaving your keyboard.",
+  "title": "Dynatrace",
+  "description": "Run DQL, search logs and traces, and watch open Davis problems in the menu bar — across multiple Dynatrace tenants.",
   "icon": "dynatrace-icon.png",
   "author": "yaroslav_volenyuk",
   "platforms": [
@@ -95,7 +95,7 @@
       "name": "dt-manage-tenants",
       "title": "Manage Tenants",
       "subtitle": "Dynatrace",
-      "description": "Add, edit, test, and switch between Dynatrace tenants",
+      "description": "Add, edit, test, and switch between Dynatrace tenants, each with a platform token or an OAuth client",
       "mode": "view",
       "icon": "dynatrace-icon.png"
     },

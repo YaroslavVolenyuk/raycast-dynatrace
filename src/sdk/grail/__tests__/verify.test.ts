@@ -62,9 +62,15 @@ it("passes when the environment verifies the query", async () => {
   expect(mockFetch.mock.calls[0][0]).toContain("/platform/storage/query/v1/query:verify");
 });
 
-it("passes on 403 — reachable, the scope check reports missing scopes", async () => {
+it("reports a 403 as reachable but access denied, not as a plain success", async () => {
   mockFetch.mockResolvedValueOnce(respond(403, '{"error":{"code":403}}'));
-  expect((await testTenantConnection(TENANT)).valid).toBe(true);
+  expect(await testTenantConnection(TENANT)).toEqual({ valid: true, accessDenied: true });
+});
+
+it("names the platform token when the environment rejects it", async () => {
+  mockFetch.mockResolvedValueOnce(respond(401, ""));
+  const result = await testTenantConnection({ ...TENANT, platformToken: "dt0s16.X" });
+  expect(result.valid === false && result.error).toMatch(/rejected the platform token/);
 });
 
 it("does not call the environment when the credentials are wrong", async () => {

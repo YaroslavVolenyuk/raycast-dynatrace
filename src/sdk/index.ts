@@ -6,7 +6,7 @@
  * published later as `@dynatrace-oss/dynatrace-ts-client`.
  *
  * Sub-modules:
- *   - auth/      OAuth client-credentials, token cache, TenantConfig
+ *   - auth/      OAuth client-credentials or platform token, token cache, TenantConfig
  *   - grail/     DQL execution, verify/autocomplete, escapeDqlString
  *   - resources/ one module per resource (logs, spans)
  */
@@ -17,6 +17,8 @@ export {
   invalidateTokenCache,
   validateTenantCredentials,
   findMissingScopes,
+  credentialsKind,
+  credentialsFingerprint,
 } from "./auth";
 export {
   escapeDqlString,

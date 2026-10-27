@@ -19,7 +19,7 @@ export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
     const scopes = detail.match(/\(([^)]*:[^)]*)\)/)?.[1];
     return {
       kind: "config",
-      summary: scopes ? `Missing OAuth scope: ${scopes}` : "Missing OAuth scope",
+      summary: scopes ? `Missing scope: ${scopes}` : "Missing scope",
       detail,
     };
   }
@@ -31,7 +31,7 @@ export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
   }
   // Name of the environment host does not resolve while the SSO answered: the URL is wrong.
   if (/environment url not found/i.test(detail)) {
-    return { kind: "config", summary: "Environment URL not found — check Manage Tenants", detail };
+    return { kind: "config", summary: "Environment URL not found — check the tenant", detail };
   }
   if (/endpoint url|html page/i.test(detail)) {
     return { kind: "config", summary: "Tenant endpoint looks wrong", detail };

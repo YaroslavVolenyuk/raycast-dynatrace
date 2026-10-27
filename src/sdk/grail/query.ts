@@ -3,7 +3,7 @@
 // UI hooks wrap these for view-commands; background commands call them directly.
 
 import { ZodError } from "zod";
-import { getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
+import { credentialsKind, getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
 import { grailResponseSchema, type GrailNotification } from "./schema";
 import { environmentNetworkError, isNetworkError, ssoNetworkError } from "./network";
 
@@ -124,18 +124,21 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
     clearTimeout(timeout);
   }
 
-  // 401: invalidate cached token and retry once
-  if (response.status === 401 && !_isRetry) {
+  // 401: invalidate cached token and retry once. A platform token is used as is,
+  // so asking again would only repeat the same request.
+  if (response.status === 401 && !_isRetry && !tenant.platformToken) {
     invalidateTokenCache(tenant.id);
     return executeDqlQuery<T>(tenant, query, { ...options, signal: userSignal }, true);
   }
 
   if (response.status === 401) {
-    throw new Error("Authentication failed — token rejected by Dynatrace. Check credentials in Manage Tenants.");
+    throw new Error(
+      `Authentication failed — the ${credentialsKind(tenant)} was rejected by Dynatrace. Check the tenant in Manage Tenants.`,
+    );
   }
   if (response.status === 403) {
     throw new Error(
-      `Access denied — OAuth client is missing required scopes${
+      `Access denied — the ${credentialsKind(tenant)} is missing required scopes${
         options.requiredScopes?.length ? ` (${options.requiredScopes.join(", ")})` : ""
       }. Check Manage Tenants.`,
     );
@@ -218,7 +221,7 @@ function parseGrailBody(rawText: string) {
     throw new Error(
       "Server returned an HTML page instead of JSON. " +
         "This usually means the endpoint URL is wrong or the token has expired. " +
-        "Check your tenant configuration in Manage Tenants.",
+        "Check your tenant configuration.",
     );
   }
   try {
@@ -279,7 +282,9 @@ async function pollGrailQuery(
 
   if (response.status === 401) {
     invalidateTokenCache(tenant.id);
-    throw new Error("Authentication failed while polling query results. Check credentials in Manage Tenants.");
+    throw new Error(
+      `Authentication failed while polling query results. Check the ${credentialsKind(tenant)} in Manage Tenants.`,
+    );
   }
   if (!response.ok) {
     throw new Error(`HTTP ${response.status} while polling query results: ${rawText.slice(0, 300)}`);

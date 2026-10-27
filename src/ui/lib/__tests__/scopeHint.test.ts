@@ -20,6 +20,14 @@ describe("missingScopesError", () => {
     const err = missingScopesError({ scopes: ["storage:buckets:read"] }, REQUIRED)!;
     const info = classifyProblemsError(err);
     expect(info.kind).toBe("config");
-    expect(info.summary).toBe("Missing OAuth scope: storage:events:read");
+    expect(info.summary).toBe("Missing scope: storage:events:read");
+  });
+});
+
+describe("hints for a platform-token tenant", () => {
+  it("asks for a token with the scopes, not an OAuth client", () => {
+    const err = missingScopesError({ scopes: [], platformToken: "dt0s16.X" }, ["storage:events:read"]);
+    expect(err?.message).toMatch(/platform token that has them/);
+    expect(err?.message).not.toMatch(/OAuth/);
   });
 });

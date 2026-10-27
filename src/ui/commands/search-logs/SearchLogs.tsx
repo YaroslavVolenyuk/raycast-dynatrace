@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { useRef, useState } from "react";
 import { listLogs, LOG_MAX_LIMIT, LOG_PAGE_SIZE, LOGS_REQUIRED_SCOPES, type LogLevel } from "../../../sdk/resources";
@@ -16,6 +16,7 @@ import {
   type TimeframeValue,
 } from "../../lib/listArgs";
 import EmptyTenantState from "../../components/EmptyTenantState";
+import TenantActions, { ManageTenantsAction } from "../../components/TenantActions";
 import LogDetail from "./LogDetail";
 
 interface CommandArguments {
@@ -65,7 +66,8 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
   const [loadedMore, setLoadedMore] = useState<{ key: string; limit: number }>();
   const abortable = useRef<AbortController>(null);
 
-  const { tenant, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
+  const { tenant, tenants, isLoading: tenantLoading, error: tenantError, reload: reloadTenants } = useActiveTenant();
+  const tenantActions = <TenantActions tenant={tenant} tenants={tenants} onChanged={reloadTenants} />;
 
   // Load More raises the limit for the current search only: a new search text,
   // level, timeframe or tenant starts again at the first page, not at up to 1,000
@@ -73,10 +75,14 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
   const searchKey = JSON.stringify([search, level, timeframe, tenant?.id]);
   const limit = loadedMore?.key === searchKey ? loadedMore.limit : initialLimit;
 
-  const { data, isLoading, error, revalidate } = usePromise(
-    (lvl: LogLevel, tf: TimeframeValue, lim: number, q: string, tenantId: string) => {
-      void tenantId; // in the deps so a tenant switch refetches
-      return listLogs(liveTransport, tenant!, {
+  const {
+    data: fetched,
+    isLoading,
+    error,
+    revalidate,
+  } = usePromise(
+    async (lvl: LogLevel, tf: TimeframeValue, lim: number, q: string, tenantId: string) => {
+      const page = await listLogs(liveTransport, tenant!, {
         level: lvl,
         timeframeDql: tf,
         timeframe: parseTimeframe(tf),
@@ -84,11 +90,15 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
         search: q,
         signal: abortable.current?.signal,
       });
+      return { ...page, tenantId };
     },
     [level, timeframe, limit, search, tenant?.id ?? ""],
     { execute: !!tenant, abortable },
   );
 
+  // usePromise keeps the previous result while the next one loads: after a tenant
+  // switch that would list the old tenant's logs under the new tenant's name.
+  const data = fetched?.tenantId === tenant?.id ? fetched : undefined;
   const entries = data?.entries ?? [];
   const skipped = data?.skipped ?? 0;
   // A full page means more logs probably exist in the timeframe.
@@ -136,12 +146,27 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
       </ActionPanel.Submenu>
     </ActionPanel.Section>
   );
+  const allListActions = (
+    <>
+      {listActions}
+      {tenantActions}
+    </>
+  );
 
   // A corrupted tenant store must surface as an error, not as "no tenant".
   if (tenantError) {
     return (
       <List isLoading={false}>
-        <List.EmptyView icon={Icon.Warning} title="Could Not Load Tenants" description={tenantError} />
+        <List.EmptyView
+          icon={Icon.Warning}
+          title="Could Not Load Tenants"
+          description={tenantError}
+          actions={
+            <ActionPanel>
+              <ManageTenantsAction onChanged={reloadTenants} />
+            </ActionPanel>
+          }
+        />
       </List>
     );
   }
@@ -149,7 +174,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
   if (!tenantLoading && !tenant) {
     return (
       <List isLoading={false}>
-        <EmptyTenantState />
+        <EmptyTenantState onChanged={reloadTenants} />
       </List>
     );
   }
@@ -164,11 +189,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
           actions={
             <ActionPanel>
               <Action title="Retry" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
-              <Action
-                title="Open Manage Tenants"
-                icon={Icon.Gear}
-                onAction={() => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated })}
-              />
+              {tenantActions}
             </ActionPanel>
           }
         />
@@ -198,7 +219,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
           LOGS_REQUIRED_SCOPES,
           `Nothing in ${timeframeTitle(timeframe).toLowerCase()}. Try another level, a longer timeframe (⌘⇧T), or different search text.`,
         )}
-        actions={<ActionPanel>{listActions}</ActionPanel>}
+        actions={<ActionPanel>{allListActions}</ActionPanel>}
       />
       <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
         {entries.map((entry, index) => (
@@ -226,7 +247,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
                 />
                 <Action.CopyToClipboard title="Copy Log Content" content={entry.content} />
                 <Action.CopyToClipboard title="Copy Timestamp" content={entry.timestamp} />
-                {listActions}
+                {allListActions}
               </ActionPanel>
             }
           />

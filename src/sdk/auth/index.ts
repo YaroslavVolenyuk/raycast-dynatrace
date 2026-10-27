@@ -1,5 +1,6 @@
 /**
- * SDK · auth — OAuth 2.0 client-credentials for Dynatrace SSO.
+ * SDK · auth — OAuth 2.0 client-credentials for Dynatrace SSO, or a platform
+ * token used as is.
  *
  * Tokens are cached in-process (never persisted to disk) with a 30-second
  * proactive refresh window. This module has zero Raycast/React imports — it is
@@ -18,6 +19,18 @@ export interface TenantConfig {
   clientSecret: string;
   ssoEndpoint: string; // default: derived from tenantEndpoint (prod/dev/sprint SSO)
   scopes: string[]; // e.g. ["storage:logs:read", "storage:spans:read"]
+  /**
+   * Platform token (dt0s16.…), sent as the bearer token as is. When set, the
+   * OAuth fields are unused (empty) and queries run with the permissions of the
+   * user who created the token. `scopes` then lists what the user says the token
+   * carries: the token cannot be asked for them, but local scope checks need them.
+   */
+  platformToken?: string;
+}
+
+/** What holds this tenant's scopes — for error messages. */
+export function credentialsKind(tenant: Pick<TenantConfig, "platformToken">): string {
+  return tenant.platformToken ? "platform token" : "OAuth client";
 }
 
 interface CachedToken {
@@ -83,10 +96,19 @@ const REFRESH_BUFFER_MS = 30_000; // refresh 30 seconds before expiry
  * secret is hashed so it never appears in the key itself.
  */
 function cacheKeyFor(tenant: TenantConfig): string {
-  const fingerprint = createHash("sha256")
-    .update(JSON.stringify([tenant.clientId, tenant.clientSecret, tenant.ssoEndpoint, tenant.scopes]))
+  return `token:${tenant.id}:${credentialsFingerprint(tenant)}`;
+}
+
+/**
+ * SHA-256 over everything that decides what a token may see. Changes when any
+ * credential or scope changes; the secrets themselves cannot be read back from it.
+ */
+export function credentialsFingerprint(tenant: TenantConfig): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([tenant.clientId, tenant.clientSecret, tenant.ssoEndpoint, tenant.scopes, tenant.platformToken]),
+    )
     .digest("hex");
-  return `token:${tenant.id}:${fingerprint}`;
 }
 
 // ── Main function ─────────────────────────────────────────────────────────────
@@ -96,6 +118,8 @@ function cacheKeyFor(tenant: TenantConfig): string {
  * Caches tokens in memory and proactively refreshes 30 seconds before expiry.
  */
 export async function getAccessToken(tenant: TenantConfig): Promise<string> {
+  if (tenant.platformToken) return tenant.platformToken;
+
   const cacheKey = cacheKeyFor(tenant);
 
   const cached = tokenCache.get(cacheKey);
@@ -180,6 +204,8 @@ export function invalidateTokenCache(tenantId: string): void {
 export async function validateTenantCredentials(
   tenant: TenantConfig,
 ): Promise<{ valid: true } | { valid: false; error: string }> {
+  // No SSO step: the environment itself checks a platform token (testTenantConnection).
+  if (tenant.platformToken) return { valid: true };
   try {
     // A test must ask the SSO, not the cache: the client may have been revoked meanwhile.
     invalidateTokenCache(tenant.id);

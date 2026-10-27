@@ -1,4 +1,4 @@
-import { findMissingScopes } from "../../sdk/auth";
+import { credentialsKind, findMissingScopes } from "../../sdk/auth";
 import type { TenantConfig } from "../../sdk/auth";
 
 /**
@@ -6,14 +6,21 @@ import type { TenantConfig } from "../../sdk/auth";
  * Grail returns an empty result (not a 403) when e.g. `storage:buckets:read`
  * is absent, so an empty list is the only symptom the user sees.
  */
+/** Where a missing scope has to be added, besides the tenant's scope list. */
+function grantHint(tenant: Pick<TenantConfig, "platformToken">): string {
+  return tenant.platformToken
+    ? "create a platform token that has them"
+    : `grant them to the ${credentialsKind(tenant)} in Account Management`;
+}
+
 export function emptyDescription(
-  tenant: Pick<TenantConfig, "scopes"> | null | undefined,
+  tenant: Pick<TenantConfig, "scopes" | "platformToken"> | null | undefined,
   required: readonly string[],
   fallback: string,
 ): string {
   const missing = tenant ? findMissingScopes(tenant, required) : [];
-  if (missing.length === 0) return fallback;
-  return `${fallback} Possibly missing OAuth scopes: ${missing.join(", ")} — add them in Manage Tenants and to the OAuth client.`;
+  if (!tenant || missing.length === 0) return fallback;
+  return `${fallback} Possibly missing scopes: ${missing.join(", ")} — ${grantHint(tenant)} and list them in Manage Tenants.`;
 }
 
 /**
@@ -25,12 +32,12 @@ export function emptyDescription(
  * problemsError classifies both the same way.
  */
 export function missingScopesError(
-  tenant: Pick<TenantConfig, "scopes">,
+  tenant: Pick<TenantConfig, "scopes" | "platformToken">,
   required: readonly string[],
 ): Error | undefined {
   const missing = findMissingScopes(tenant, required);
   if (missing.length === 0) return undefined;
   return new Error(
-    `Tenant is missing required scopes (${missing.join(", ")}). Grant them to the OAuth client in Account Management and add them to the tenant's scopes in Manage Tenants.`,
+    `Tenant is missing required scopes (${missing.join(", ")}). To fix: ${grantHint(tenant)}, and add them to the tenant's scopes in Manage Tenants.`,
   );
 }

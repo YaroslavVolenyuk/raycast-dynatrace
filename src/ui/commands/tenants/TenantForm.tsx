@@ -1,8 +1,8 @@
-// Add / edit a Dynatrace tenant. On submit the credentials are exchanged for a
-// real OAuth token and the environment is asked to verify a query
-// (testTenantConnection) so the user knows the tenant
-// works before it is persisted — the whole point of this command is to get the
-// extension talking to a live environment without relying on mock data.
+// Add / edit a Dynatrace tenant, authenticated with a platform token or an
+// OAuth client. On submit the credentials are checked (an OAuth client gets a
+// real token from the SSO) and the environment is asked to verify a query
+// (testTenantConnection), so the user knows the tenant works before it is
+// persisted.
 
 import { Form, ActionPanel, Action, Icon, Alert, confirmAlert, showToast, Toast, useNavigation } from "@raycast/api";
 import { useState } from "react";
@@ -14,6 +14,7 @@ import {
   buildTenantConfig,
   describeScopeCheck,
   validateForm,
+  type AuthType,
   type TenantFormValues,
 } from "./tenantForm.helpers";
 
@@ -31,8 +32,11 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
   // Every field is controlled. Mixing uncontrolled (defaultValue) fields with the
   // controlled scopes field let a re-render wipe what the user had typed.
   const [values, setValues] = useState<TenantFormValues>({
+    // New tenants start with the platform token: no admin needed to create one.
+    authType: tenant && !tenant.platformToken ? "oauth" : "token",
     name: tenant?.name ?? "",
     tenantEndpoint: tenant?.tenantEndpoint ?? "",
+    platformToken: tenant?.platformToken ?? "",
     clientId: tenant?.clientId ?? "",
     clientSecret: tenant?.clientSecret ?? "",
     ssoEndpoint: tenant?.ssoEndpoint ?? "",
@@ -41,7 +45,7 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof TenantFormValues, string>>>({});
 
   /** Props for a controlled field: value, change handler that also clears its error, and error. */
-  const field = (id: keyof TenantFormValues) => ({
+  const field = (id: Exclude<keyof TenantFormValues, "authType">) => ({
     id,
     value: values[id],
     error: fieldErrors[id],
@@ -73,8 +77,17 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
           toast.message = result.error;
           return; // keep the form open so the user can fix credentials
         }
-        const check = describeScopeCheck(config);
-        toast.style = check.style === "failure" ? Toast.Style.Failure : Toast.Style.Success;
+        const check = describeScopeCheck(config, result);
+        if (check.style === "failure") {
+          // Not saved: the next toast ("Tenant added") would hide this one at once.
+          toast.style = Toast.Style.Failure;
+          toast.title = check.title;
+          toast.message = [check.message, "fix it, or keep the tenant with Save Without Testing"]
+            .filter(Boolean)
+            .join(" — ");
+          return;
+        }
+        toast.style = Toast.Style.Success;
         toast.title = check.title;
         if (check.message) toast.message = check.message;
       }
@@ -147,7 +160,16 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
         </ActionPanel>
       }
     >
-      <Form.Description text="Connect a Dynatrace environment using an OAuth client (client-credentials). Create one under Account Management → Identity & access management → OAuth clients." />
+      <Form.Dropdown
+        id="authType"
+        title="Authentication"
+        value={values.authType}
+        onChange={(v) => setValues((current) => ({ ...current, authType: v as AuthType }))}
+        info="Platform token: personal, queries run with your own permissions. Create it under Account Management → My platform tokens. OAuth client: a service client created by an account admin under Identity & access management → OAuth clients."
+      >
+        <Form.Dropdown.Item value="token" title="Platform Token" icon={Icon.Key} />
+        <Form.Dropdown.Item value="oauth" title="OAuth Client" icon={Icon.Lock} />
+      </Form.Dropdown>
       <Form.TextField
         {...field("name")}
         title="Name"
@@ -160,26 +182,43 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
         placeholder="https://abc12345.apps.dynatrace.com"
         info="Your Dynatrace platform environment URL: https://<environment-id>.apps.dynatrace.com. A URL copied from the browser address bar is fine."
       />
-      <Form.TextField {...field("clientId")} title="Client ID" placeholder="dt0s02.ABCDEFGH" />
-      <Form.PasswordField
-        {...field("clientSecret")}
-        title="Client Secret"
-        placeholder="dt0s02.ABCDEFGH.XXXXXXXX…"
-        info="Stored in Raycast's encrypted local storage, on this machine only. Tokens stay in memory only."
-      />
+      {values.authType === "token" ? (
+        <Form.PasswordField
+          {...field("platformToken")}
+          title="Platform Token"
+          placeholder="dt0s16.ABCDEFGH.XXXXXXXX…"
+          info="Stored in Raycast's encrypted local storage, on this machine only."
+        />
+      ) : (
+        <>
+          <Form.TextField {...field("clientId")} title="Client ID" placeholder="dt0s02.ABCDEFGH" />
+          <Form.PasswordField
+            {...field("clientSecret")}
+            title="Client Secret"
+            placeholder="dt0s02.ABCDEFGH.XXXXXXXX…"
+            info="Stored in Raycast's encrypted local storage, on this machine only. Tokens stay in memory only."
+          />
+        </>
+      )}
       <Form.Separator />
       <Form.TextArea
         {...field("scopes")}
         title="Scopes"
         placeholder={"storage:logs:read\nstorage:spans:read"}
-        info="One scope per line. ⌘⇧R loads the read-only environment set. Do NOT mix account-level scopes (account-*, iam:*, app-engine:*) with environment scopes (storage:*, environment-api:*) in one tenant — Dynatrace rejects the combined token request as invalid_request."
+        info={
+          values.authType === "token"
+            ? "The scopes the platform token was created with, one per line. Dynatrace cannot report them, so they are listed here: they are used to warn about a missing scope before a query returns nothing. ⌘⇧R loads the read-only set."
+            : "One scope per line; only these are requested. ⌘⇧R loads the read-only environment set. Do NOT mix account-level scopes (account-*, iam:*, app-engine:*) with environment scopes (storage:*, environment-api:*) in one tenant — Dynatrace rejects the combined token request as invalid_request."
+        }
       />
-      <Form.TextField
-        {...field("ssoEndpoint")}
-        title="SSO Token Endpoint"
-        placeholder="Default: sso.dynatrace.com"
-        info="Leave blank to use sso.dynatrace.com. An OAuth client only works with the SSO it was created on — override only for special setups."
-      />
+      {values.authType === "oauth" && (
+        <Form.TextField
+          {...field("ssoEndpoint")}
+          title="SSO Token Endpoint"
+          placeholder="Default: sso.dynatrace.com"
+          info="Leave blank to use sso.dynatrace.com. An OAuth client only works with the SSO it was created on — override only for special setups."
+        />
+      )}
     </Form>
   );
 }

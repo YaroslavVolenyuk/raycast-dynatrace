@@ -8,13 +8,15 @@ import {
   getActiveTenant,
   setActiveTenant,
   resetTenants,
-  countUnreadableTenants,
+  readTenantState,
 } from "../tenants";
 import type { TenantConfig } from "../../sdk/auth";
 import { StorageKeys } from "../storageKeys";
 
 // Reset in-memory LocalStorage mock between tests
 const ls = LocalStorage as unknown as { _clear: () => void };
+
+const countUnreadableTenants = async () => (await readTenantState()).unreadable;
 
 beforeEach(() => {
   ls._clear();
@@ -158,5 +160,41 @@ describe("resetTenants", () => {
     expect(await LocalStorage.getItem(StorageKeys.tenantsActive)).toBeNull();
     await saveTenant(makeTenant("fresh"));
     expect((await listTenants()).map((t) => t.id)).toEqual(["fresh"]);
+  });
+});
+
+describe("platform-token tenants", () => {
+  const tokenTenant: TenantConfig = {
+    id: "tok",
+    name: "Token",
+    tenantEndpoint: "https://abc.apps.dynatrace.com",
+    clientId: "",
+    clientSecret: "",
+    ssoEndpoint: "",
+    scopes: ["storage:buckets:read", "storage:logs:read"],
+    platformToken: "dt0s16.AB.CD",
+  };
+
+  it("round-trips next to OAuth tenants", async () => {
+    await saveTenant(makeTenant("oauth"));
+    await saveTenant(tokenTenant);
+    const state = await readTenantState();
+    expect(state.tenants.map((t) => t.id)).toEqual(["oauth", "tok"]);
+    expect(state.tenants[1]).toEqual(tokenTenant);
+    expect(state.unreadable).toBe(0);
+  });
+
+  it("keeps an OAuth tenant without a secret as unreadable instead of using it", async () => {
+    await LocalStorage.setItem(StorageKeys.tenants, JSON.stringify([{ ...makeTenant("x"), clientSecret: "" }]));
+    const state = await readTenantState();
+    expect(state.tenants).toEqual([]);
+    expect(state.unreadable).toBe(1);
+  });
+
+  it("reads the active tenant once with the list", async () => {
+    await saveTenant(makeTenant("a"));
+    await saveTenant(tokenTenant);
+    await setActiveTenant("tok");
+    expect((await readTenantState()).active?.id).toBe("tok");
   });
 });

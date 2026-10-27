@@ -39,7 +39,7 @@ export default function TemplateList({ currentQuery, onPick }: TemplateListProps
                   markdown={fenceCode(t.query)}
                   metadata={
                     <List.Item.Detail.Metadata>
-                      <List.Item.Detail.Metadata.TagList title="Needs OAuth scopes">
+                      <List.Item.Detail.Metadata.TagList title="Needs scopes">
                         {templateScopes(t).map((scope) => (
                           <List.Item.Detail.Metadata.TagList.Item key={scope} text={scope} />
                         ))}

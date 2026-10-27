@@ -1,6 +1,5 @@
 import {
   parseScopes,
-  normalizeUrl,
   validateForm,
   buildTenantConfig,
   DEFAULT_SSO_ENDPOINT,
@@ -9,8 +8,11 @@ import {
   describeScopeCheck,
   type TenantFormValues,
 } from "../tenantForm.helpers";
+import { normalizeUrl } from "../../../../services/environmentUrl";
 
 const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValues => ({
+  authType: "oauth",
+  platformToken: "",
   name: "Production",
   tenantEndpoint: "https://abc12345.apps.dynatrace.com",
   clientId: "dt0s02.ABC",
@@ -158,5 +160,44 @@ describe("environment URL as pasted by users", () => {
 
   it("accepts a non-Dynatrace host (proxies, Managed) unchanged", () => {
     expect(validateForm(validValues({ tenantEndpoint: "https://dt.example.com" })).tenantEndpoint).toBeUndefined();
+  });
+});
+
+describe("platform-token tenants in the form", () => {
+  const tokenValues = (overrides: Partial<TenantFormValues> = {}) =>
+    validValues({
+      authType: "token",
+      clientId: "",
+      clientSecret: "",
+      ssoEndpoint: "",
+      platformToken: "dt0s16.A.B",
+      ...overrides,
+    });
+
+  it("needs only URL, name, token and scopes", () => {
+    expect(validateForm(tokenValues())).toEqual({});
+  });
+
+  it("requires the token and rejects a classic API token", () => {
+    expect(validateForm(tokenValues({ platformToken: " " })).platformToken).toMatch(/required/);
+    expect(validateForm(tokenValues({ platformToken: "dt0c01.X.Y" })).platformToken).toMatch(/classic API token/);
+  });
+
+  it("keeps only the fields of the chosen method", () => {
+    const token = buildTenantConfig(tokenValues({ clientSecret: "left-over" }), "id1");
+    expect(token).toMatchObject({ platformToken: "dt0s16.A.B", clientId: "", clientSecret: "", ssoEndpoint: "" });
+    const oauth = buildTenantConfig(validValues({ platformToken: "dt0s16.left-over" }), "id1");
+    expect(oauth.platformToken).toBeUndefined();
+    expect(oauth.clientSecret).toBe("dt0s02.ABC.dummySecretValueNotReal");
+  });
+
+  it("checks the scopes declared for the token", () => {
+    const r = describeScopeCheck({ scopes: ["storage:logs:read"], platformToken: "dt0s16.A.B" });
+    expect(r.style).toBe("failure");
+  });
+
+  it("never reports a 403 from the environment as verified", () => {
+    const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES, ...OPTIONAL_SCOPES] }, { accessDenied: true });
+    expect(r).toMatchObject({ style: "failure", title: "Connected, but access denied" });
   });
 });

@@ -162,3 +162,32 @@ test("validateTenantCredentials never shows [object Object] for a nested error b
   expect(result.valid === false && result.error).toMatch(/Not Found/);
   expect(result.valid === false && result.error).toMatch(/not an SSO token endpoint/);
 });
+
+describe("platform token", () => {
+  const TOKEN_TENANT: TenantConfig = { ...TENANT, platformToken: "dt0s16.ABC.SECRET", scopes: [] };
+
+  test("getAccessToken returns the token without asking the SSO", async () => {
+    const { getAccessToken } = await loadAuth();
+    expect(await getAccessToken(TOKEN_TENANT)).toBe("dt0s16.ABC.SECRET");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  test("validateTenantCredentials leaves the check to the environment", async () => {
+    const { validateTenantCredentials } = await loadAuth();
+    expect(await validateTenantCredentials(TOKEN_TENANT)).toEqual({ valid: true });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  test("findMissingScopes checks the scopes declared for the token", async () => {
+    const { findMissingScopes } = await loadAuth();
+    expect(findMissingScopes({ ...TOKEN_TENANT, scopes: ["storage:logs:read"] }, ["storage:logs:read"])).toEqual([]);
+    expect(findMissingScopes(TOKEN_TENANT, ["storage:spans:read"])).toEqual(["storage:spans:read"]);
+  });
+
+  test("credentialsFingerprint changes with the token, never contains it", async () => {
+    const { credentialsFingerprint } = await loadAuth();
+    const a = credentialsFingerprint(TOKEN_TENANT);
+    expect(a).not.toContain("SECRET");
+    expect(credentialsFingerprint({ ...TOKEN_TENANT, platformToken: "dt0s16.OTHER" })).not.toBe(a);
+  });
+});

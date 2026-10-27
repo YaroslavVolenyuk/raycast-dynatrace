@@ -1,9 +1,9 @@
 // Consolidates the repeated tenant-bootstrap pattern across commands:
-// useState + useEffect + getActiveTenant + listTenants.
+// useState + useEffect + readTenantState.
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { TenantConfig } from "../../sdk/auth";
-import { getActiveTenant, listTenants } from "../../services/tenants";
+import { readTenantState } from "../../services/tenants";
 
 interface ActiveTenantState {
   /** The currently active tenant, or null if none configured / still loading. */
@@ -14,6 +14,8 @@ interface ActiveTenantState {
   isLoading: boolean;
   /** Non-null if an error occurred fetching tenant data. */
   error: string | null;
+  /** Reads the tenants again, e.g. after Manage Tenants or a tenant switch. */
+  reload: () => void;
 }
 
 /**
@@ -27,15 +29,18 @@ export function useActiveTenant(): ActiveTenantState {
   const [tenants, setTenants] = useState<TenantConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generation, setGeneration] = useState(0);
+  const reload = useCallback(() => setGeneration((g) => g + 1), []);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([getActiveTenant(), listTenants()])
-      .then(([activeTenant, allTenants]) => {
+    readTenantState()
+      .then((state) => {
         if (cancelled) return;
-        setTenant(activeTenant);
-        setTenants(allTenants);
+        setTenant(state.active);
+        setTenants(state.tenants);
+        setError(null);
       })
       .catch((err) => {
         if (cancelled) return;
@@ -48,7 +53,7 @@ export function useActiveTenant(): ActiveTenantState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [generation]);
 
-  return { tenant, tenants, isLoading, error };
+  return { tenant, tenants, isLoading, error, reload };
 }

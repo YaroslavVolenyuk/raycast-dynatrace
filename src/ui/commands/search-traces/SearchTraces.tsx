@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { useMemo, useRef, useState } from "react";
 import {
@@ -14,6 +14,7 @@ import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
 import { pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
 import EmptyTenantState from "../../components/EmptyTenantState";
+import TenantActions, { ManageTenantsAction } from "../../components/TenantActions";
 import TraceDetail from "./TraceDetail";
 
 interface CommandArguments {
@@ -66,23 +67,32 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
   const [status, setStatus] = useState<SpanStatus>("all");
   const abortable = useRef<AbortController>(null);
 
-  const { tenant, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
+  const { tenant, tenants, isLoading: tenantLoading, error: tenantError, reload: reloadTenants } = useActiveTenant();
+  const tenantActions = <TenantActions tenant={tenant} tenants={tenants} onChanged={reloadTenants} />;
 
-  const { data, isLoading, error, revalidate } = usePromise(
-    (tf: TimeframeValue, tid: string | undefined, st: SpanStatus, tenantId: string) => {
-      void tenantId; // in the deps so a tenant switch refetches
-      return listSpans(liveTransport, tenant!, {
+  const {
+    data: fetched,
+    isLoading,
+    error,
+    revalidate,
+  } = usePromise(
+    async (tf: TimeframeValue, tid: string | undefined, st: SpanStatus, tenantId: string) => {
+      const page = await listSpans(liveTransport, tenant!, {
         timeframeDql: tf,
         timeframe: parseTimeframe(tf),
         traceId: tid,
         status: st,
         signal: abortable.current?.signal,
       });
+      return { ...page, tenantId };
     },
     [timeframeStr, initialTraceId, status, tenant?.id ?? ""],
     { execute: !!tenant, abortable },
   );
 
+  // usePromise keeps the previous result while the next one loads: after a tenant
+  // switch that would list the old tenant's spans under the new tenant's name.
+  const data = fetched?.tenantId === tenant?.id ? fetched : undefined;
   const skipped = data?.skipped ?? 0;
   const entries = useMemo<SpanEntry[]>(() => {
     const all = data?.entries ?? [];
@@ -97,7 +107,16 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
   if (tenantError) {
     return (
       <List isLoading={false}>
-        <List.EmptyView icon={Icon.Warning} title="Could Not Load Tenants" description={tenantError} />
+        <List.EmptyView
+          icon={Icon.Warning}
+          title="Could Not Load Tenants"
+          description={tenantError}
+          actions={
+            <ActionPanel>
+              <ManageTenantsAction onChanged={reloadTenants} />
+            </ActionPanel>
+          }
+        />
       </List>
     );
   }
@@ -105,7 +124,7 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
   if (!tenantLoading && !tenant) {
     return (
       <List isLoading={false}>
-        <EmptyTenantState />
+        <EmptyTenantState onChanged={reloadTenants} />
       </List>
     );
   }
@@ -120,11 +139,7 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
           actions={
             <ActionPanel>
               <Action title="Retry" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
-              <Action
-                title="Open Manage Tenants"
-                icon={Icon.Gear}
-                onAction={() => launchCommand({ name: "dt-manage-tenants", type: LaunchType.UserInitiated })}
-              />
+              {tenantActions}
             </ActionPanel>
           }
         />
@@ -164,6 +179,7 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
           SPANS_REQUIRED_SCOPES,
           "Try a different timeframe or remove the trace filter.",
         )}
+        actions={<ActionPanel>{tenantActions}</ActionPanel>}
       />
       <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
         {entries.map((entry, index) => (
@@ -199,6 +215,7 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
                   shortcut={{ modifiers: ["cmd"], key: "r" }}
                   onAction={() => revalidate()}
                 />
+                {tenantActions}
               </ActionPanel>
             }
           />

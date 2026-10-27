@@ -29,7 +29,7 @@ export function environmentNetworkError(err: unknown, url: string): Error {
   const host = hostOf(url);
   const code = causeCode(err);
   if (code === "ENOTFOUND") {
-    return new Error(`Environment URL not found: ${host} does not exist. Check the tenant in Manage Tenants.`);
+    return new Error(`Environment URL not found: ${host} does not exist. Check the tenant's Environment URL.`);
   }
   return new Error(
     `Cannot reach environment ${host}${code ? ` (${code})` : ""}. Check the Environment URL and your network.`,

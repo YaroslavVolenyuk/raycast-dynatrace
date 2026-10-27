@@ -1,6 +1,7 @@
-// Manage Tenants — the command that unblocks live usage. Lists configured
-// Dynatrace tenants and lets the user add, edit, switch, test and remove them.
-// Every other command resolves its tenant from what is configured here.
+// Manage Tenants — the one place where Dynatrace tenants are set up, each with a
+// platform token or an OAuth client. Add, edit, switch, test and remove them;
+// every other command uses the active one. Also opened from inside Search Logs,
+// Search Traces and Run DQL (Manage Tenants… action).
 
 import {
   List,
@@ -18,14 +19,7 @@ import { usePromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
 import { testTenantConnection } from "../../../sdk";
 import { describeScopeCheck } from "./tenantForm.helpers";
-import {
-  listTenants,
-  getActiveTenant,
-  setActiveTenant,
-  deleteTenant,
-  resetTenants,
-  countUnreadableTenants,
-} from "../../../services";
+import { setActiveTenant, deleteTenant, resetTenants, readTenantState } from "../../../services";
 import TenantForm from "./TenantForm";
 
 export default function ManageTenants() {
@@ -35,12 +29,8 @@ export default function ManageTenants() {
   // Raycast Cache is plain files on disk.
   const { data, isLoading, error, revalidate } = usePromise(
     async () => {
-      const [tenants, active, unreadable] = await Promise.all([
-        listTenants(),
-        getActiveTenant(),
-        countUnreadableTenants(),
-      ]);
-      return { tenants, activeId: active?.id ?? null, unreadable };
+      const state = await readTenantState();
+      return { ...state, activeId: state.active?.id ?? null };
     },
     [],
     { failureToastOptions: { title: "Could not read tenants" } },
@@ -60,7 +50,7 @@ export default function ManageTenants() {
     const toast = await showToast({ style: Toast.Style.Animated, title: `Testing ${tenant.name}…` });
     const result = await testTenantConnection(tenant);
     if (result.valid) {
-      const check = describeScopeCheck(tenant);
+      const check = describeScopeCheck(tenant, result);
       toast.style = check.style === "failure" ? Toast.Style.Failure : Toast.Style.Success;
       toast.title = check.title;
       if (check.message) toast.message = check.message;
@@ -128,7 +118,7 @@ export default function ManageTenants() {
       <List.EmptyView
         icon={Icon.Globe}
         title="No tenants configured"
-        description="Add a Dynatrace environment to start querying live data."
+        description="Add a Dynatrace environment with a platform token or an OAuth client."
         actions={
           <ActionPanel>
             <Action title="Add Tenant" icon={Icon.Plus} onAction={() => push(<TenantForm onSaved={revalidate} />)} />
@@ -168,7 +158,10 @@ export default function ManageTenants() {
               subtitle={tenant.tenantEndpoint}
               accessories={[
                 ...(isActive ? [{ tag: { value: "Active", color: Color.Green } }] : []),
-                { text: `${tenant.scopes.length} scopes` },
+                {
+                  text: `${tenant.platformToken ? "Token" : "OAuth"} · ${tenant.scopes.length} scopes`,
+                  tooltip: tenant.platformToken ? "Platform token" : "OAuth client",
+                },
               ]}
               actions={
                 <ActionPanel>

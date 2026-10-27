@@ -6,7 +6,9 @@
 import { getAccessToken, validateTenantCredentials, type TenantConfig } from "../auth";
 import { environmentNetworkError, isNetworkError } from "./network";
 
-export type ConnectionTestResult = { valid: true } | { valid: false; error: string };
+export type ConnectionTestResult =
+  /** `accessDenied`: the environment answered, but refused the request (403) — a scope is missing. */
+  { valid: true; accessDenied?: boolean } | { valid: false; error: string };
 
 const VERIFY_TIMEOUT_MS = 15_000;
 
@@ -41,11 +43,13 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
   if (response.status === 401) {
     return {
       valid: false,
-      error:
-        "The environment rejected the token — the OAuth client belongs to another account, or the SSO endpoint does not match this environment",
+      error: tenant.platformToken
+        ? "The environment rejected the platform token — it is expired or revoked, or was created in another environment"
+        : "The environment rejected the token — the OAuth client belongs to another account, or the SSO endpoint does not match this environment",
     };
   }
-  // 403 = reachable and token accepted, a scope is missing: the scope check reports that.
+  // 403 = reachable and token accepted, but a scope is missing. Reported as such,
+  // not as success: the scopes listed in the tenant may not match the real ones.
   const looksLikePlatform = !body.trimStart().startsWith("<") && response.status !== 404;
   if (!looksLikePlatform) {
     return {
@@ -53,5 +57,5 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
       error: `This does not look like a Dynatrace platform environment (HTTP ${response.status}). Expected https://<environment-id>.apps.dynatrace.com`,
     };
   }
-  return { valid: true };
+  return response.status === 403 ? { valid: true, accessDenied: true } : { valid: true };
 }
