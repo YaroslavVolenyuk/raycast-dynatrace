@@ -179,7 +179,7 @@ export default function RunDql(
         id="dql"
         title="Query"
         placeholder={'fetch logs\n// Add filters by: | filter matchesValue(field, "value")\n| sort timestamp desc'}
-        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer. ⌘. suggests what can come next, ⌘T inserts a template."
+        info="A from: / to: inside the query takes precedence over the timeframe. Like Dynatrace, results are capped at 1,000 records — add | limit to get fewer. Every run is a billable Grail query (scanned data counts, up to 100 GB per query): prefer short timeframes and filter early. A query still running after 3 minutes is cancelled. ⌘. suggests what can come next, ⌘T inserts a template."
         value={dql}
         error={dqlError ?? syntaxError}
         onChange={(v) => {

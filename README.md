@@ -39,8 +39,11 @@ Tracing explorer for the corresponding trace.
 Run any DQL query against the active (or a chosen) tenant, as in the
 Dynatrace Logs/Notebooks editor. Pick a timeframe from the same presets as
 the Dynatrace picker or a custom range — a `from:` / `to:` inside the query
-takes precedence. Like Dynatrace, results are capped at 1,000 records; add
-`| limit` to the query for fewer. Results are listed with a
+takes precedence. Like Dynatrace, results are capped at 1,000 records (and
+1 MB); add `| limit` to the query for fewer. When Grail reports that a result
+was truncated or a scan limit was hit, the result list says so. Every run is a
+billable query: a query still running after 3 minutes, or one you leave by
+closing the view, is cancelled in Dynatrace so it stops scanning. Results are listed with a
 title column picked from the data, a filter over all fields, a details panel
 (⌘D), and copy actions for one record (JSON) or all records (JSON or CSV).
 The last query and timeframe are restored the next time the command opens.
@@ -55,7 +58,10 @@ Writing the query is assisted the way the Dynatrace editor does it:
 - ⌘T inserts a starter query (error logs, failed requests, open problems, …).
 
 Run DQL needs `storage:buckets:read` plus the read scope for whatever the
-query fetches (for example `storage:logs:read` for `fetch logs`).
+query fetches (for example `storage:logs:read` for `fetch logs`). Each
+template lists the scopes it needs; the default tenant scopes cover logs and
+spans only, so add `storage:events:read`, `storage:bizevents:read` or
+`storage:metrics:read` to use the other templates.
 
 ## Setup
 

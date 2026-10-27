@@ -1,5 +1,5 @@
 import { List, ActionPanel, Action, Icon, Alert, confirmAlert, useNavigation } from "@raycast/api";
-import { DQL_TEMPLATES, type DqlTemplate } from "./templates";
+import { DQL_TEMPLATES, templateScopes, type DqlTemplate } from "./templates";
 import { fenceCode } from "../../lib/markdown";
 
 interface TemplateListProps {
@@ -34,7 +34,20 @@ export default function TemplateList({ currentQuery, onPick }: TemplateListProps
               key={t.title}
               title={t.title}
               keywords={[t.query]}
-              detail={<List.Item.Detail markdown={fenceCode(t.query)} />}
+              detail={
+                <List.Item.Detail
+                  markdown={fenceCode(t.query)}
+                  metadata={
+                    <List.Item.Detail.Metadata>
+                      <List.Item.Detail.Metadata.TagList title="Needs OAuth scopes">
+                        {templateScopes(t).map((scope) => (
+                          <List.Item.Detail.Metadata.TagList.Item key={scope} text={scope} />
+                        ))}
+                      </List.Item.Detail.Metadata.TagList>
+                    </List.Item.Detail.Metadata>
+                  }
+                />
+              }
               actions={
                 <ActionPanel>
                   <Action title="Use Template" icon={Icon.Code} onAction={() => use(t)} />

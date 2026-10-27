@@ -2,7 +2,7 @@ import { List, Detail, ActionPanel, Action, Icon, useNavigation } from "@raycast
 import { usePromise } from "@raycast/utils";
 import { useMemo, useRef, useState } from "react";
 import { liveTransport, type TenantConfig } from "../../../sdk";
-import { runDql, DQL_DEFAULT_LIMIT, DQL_REQUIRED_SCOPES, type DqlResult } from "../../../sdk/resources";
+import { runDql, DQL_DEFAULT_LIMIT, requiredScopesForQuery, type DqlResult } from "../../../sdk/resources";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
 import {
@@ -25,7 +25,7 @@ interface DqlResultsProps {
   timeframeKey: string;
 }
 
-const EMPTY_RESULT: DqlResult = { records: [], columns: [], truncated: false };
+const EMPTY_RESULT: DqlResult = { records: [], columns: [], truncated: false, notices: [] };
 
 function formatTime(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -90,8 +90,10 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
   const navigationTitle = `${tenant.name} · ${period}`;
   // Same cap as the Dynatrace UI: 1,000 records unless the query limits itself.
   const sectionTitle = data
-    ? `${result.records.length} record${result.records.length === 1 ? "" : "s"}${result.truncated ? ` — capped at ${DQL_DEFAULT_LIMIT.toLocaleString("en-US")}, add | limit or narrow the query` : ""}`
+    ? `${result.records.length} record${result.records.length === 1 ? "" : "s"}${result.truncated ? ` — truncated (max ${DQL_DEFAULT_LIMIT.toLocaleString("en-US")} records, 1 MB), narrow the query` : ""}`
     : undefined;
+  // Grail's own warnings (scan limit, sampling, truncation) in its own words.
+  const sectionSubtitle = result.notices.length ? result.notices.join(" · ") : undefined;
 
   return (
     <List
@@ -110,13 +112,13 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
             ? "No record contains the filter text."
             : emptyDescription(
                 tenant,
-                DQL_REQUIRED_SCOPES,
+                requiredScopesForQuery(query),
                 `Nothing found in the selected timeframe (${period}). Try a longer one, or a from: in the query.`,
               )
         }
         actions={<ActionPanel>{queryActions}</ActionPanel>}
       />
-      <List.Section title={sectionTitle}>
+      <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
         {rows.map(({ record, index }) => {
           const time = timeColumn ? formatTime(record[timeColumn]) : undefined;
           const json = JSON.stringify(record, null, 2);

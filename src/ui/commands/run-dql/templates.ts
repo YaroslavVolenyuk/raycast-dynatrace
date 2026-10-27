@@ -1,11 +1,20 @@
 // Starter queries for Run DQL (⌘T). Each was checked with query:verify on a live
-// tenant (2026-10-26); keep them free of tenant-specific names.
+// tenant (2026-10-26); keep them free of tenant-specific names. The span
+// templates were rewritten afterwards to avoid the deprecated request.is_*
+// fields (see sdk/resources/spans.ts) and still need a live re-check.
+
+import { requiredScopesForQuery } from "../../../sdk/resources";
 
 export interface DqlTemplate {
   title: string;
   /** List section: the data the query reads. */
   section: "Logs" | "Spans" | "Events" | "Metrics";
   query: string;
+}
+
+/** The scopes a template's query needs — shown so a 403 or an empty result is not a surprise. */
+export function templateScopes(t: DqlTemplate): string[] {
+  return requiredScopesForQuery(t.query);
 }
 
 export const DQL_TEMPLATES: DqlTemplate[] = [
@@ -25,14 +34,14 @@ export const DQL_TEMPLATES: DqlTemplate[] = [
   {
     section: "Spans",
     title: "Failed requests",
-    query: "fetch spans\n| filter request.is_failed == true\n| sort start_time desc",
+    query: 'fetch spans\n| filter span.kind == "server" and span.status_code == "error"\n| sort start_time desc',
   },
   { section: "Spans", title: "Slowest spans", query: "fetch spans\n| sort duration desc\n| limit 20" },
   {
     section: "Spans",
     title: "Requests per service",
     query:
-      "fetch spans\n| filter request.is_root_span == true\n| summarize requests = count(), by: {service.name}\n| sort requests desc",
+      "fetch spans\n| filter isNull(span.parent_id)\n| summarize requests = count(), by: {service.name}\n| sort requests desc",
   },
   {
     section: "Events",
