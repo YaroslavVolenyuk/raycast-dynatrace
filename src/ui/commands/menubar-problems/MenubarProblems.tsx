@@ -7,7 +7,7 @@ import { useCachedPromise } from "@raycast/utils";
 import { buildProblemUrl } from "../../lib/deepLinks";
 import type { ProblemsErrorInfo } from "../../lib/problemsError";
 import { formatClock } from "../../lib/refreshThrottle";
-import { loadProblems, problemCountLabel, type ProblemsResult } from "./problemsStore";
+import { loadProblems, openProblemCount, problemCountLabel, type ProblemsResult } from "./problemsStore";
 
 const CATEGORY_ICON: Record<string, { source: Icon; tintColor: Color }> = {
   AVAILABILITY: { source: Icon.CircleProgress, tintColor: Color.Red },
@@ -111,8 +111,10 @@ export default function MenubarProblems() {
   if (!data) return <MenuBarExtra isLoading icon={Icon.Globe} tooltip="Loading Dynatrace problems…" />;
 
   const { problems, endpoint } = data;
-  const count = problems.length;
+  const count = openProblemCount(data);
   const countLabel = problemCountLabel(data);
+  const problemsAppUrl = `${endpoint}/ui/apps/dynatrace.davis.problems`;
+  const notShown = count - problems.length;
 
   return (
     <MenuBarExtra
@@ -136,6 +138,13 @@ export default function MenubarProblems() {
               onAction={() => open(buildProblemUrl(endpoint, p.id))}
             />
           ))}
+          {notShown > 0 && (
+            <MenuBarExtra.Item
+              title={`${data.hasMore ? `${notShown}+` : notShown} more in Dynatrace`}
+              icon={Icon.Ellipsis}
+              onAction={() => open(problemsAppUrl)}
+            />
+          )}
         </MenuBarExtra.Section>
       ) : (
         <MenuBarExtra.Item title="No open problems" subtitle={data.tenantName} icon={Icon.Checkmark} />
@@ -149,7 +158,7 @@ export default function MenubarProblems() {
         <MenuBarExtra.Item
           title="Open Problems in Dynatrace"
           icon={Icon.ArrowRight}
-          onAction={() => open(`${endpoint}/ui/apps/dynatrace.davis.problems`)}
+          onAction={() => open(problemsAppUrl)}
         />
         <MenuBarExtra.Item
           title="Refresh"

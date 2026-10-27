@@ -9,6 +9,7 @@
 
 import { Cache, environment, getPreferenceValues } from "@raycast/api";
 import {
+  credentialsFingerprint,
   liveTransport,
   listProblems,
   PROBLEMS_REQUIRED_SCOPES,
@@ -22,6 +23,12 @@ import { missingScopesError } from "../../lib/scopeHint";
 
 export const MAX_SHOWN = 7;
 /**
+ * Problems counted for the menu bar title. Fetching more records than are shown
+ * costs no extra scan (the query reads the same data either way), so the count
+ * is exact up to this cap.
+ */
+export const MAX_COUNTED = 99;
+/**
  * After a failed fetch, retry this soon instead of waiting a full refresh interval.
  * Equals the manifest wake-up interval (15m): a shorter value could not be honoured.
  */
@@ -32,7 +39,11 @@ export type ProblemsResult =
   | {
       state: "ok";
       endpoint: string;
+      /** The first MAX_SHOWN problems, newest first. */
       problems: ProblemEntry[];
+      /** Open problems found, up to MAX_COUNTED. */
+      total: number;
+      /** More than MAX_COUNTED problems are open. */
       hasMore: boolean;
       fetchedAt: number;
       /** What the result was computed for — shown so "no problems" can be checked at a glance. */
@@ -41,9 +52,26 @@ export type ProblemsResult =
     }
   | { state: "error"; endpoint?: string; error: ProblemsErrorInfo };
 
-/** "3", or "7+" when more problems are open than the menu shows. */
-export function problemCountLabel(result: { problems: ProblemEntry[]; hasMore: boolean }): string {
-  return result.hasMore ? `${MAX_SHOWN}+` : String(result.problems.length);
+/**
+ * What a result says about the open problems. Results stored by older versions
+ * (in useCachedPromise's own cache, which survives an update) have no `total`,
+ * and their `hasMore` meant "more than MAX_SHOWN": read them that way, never as zero.
+ */
+function countOf(result: { problems: ProblemEntry[]; total?: number; hasMore: boolean }) {
+  return result.total === undefined
+    ? { count: result.problems.length, cap: MAX_SHOWN }
+    : { count: result.total, cap: MAX_COUNTED };
+}
+
+/** Open problems found (up to the cap); a stored result from an older version counts what it lists. */
+export function openProblemCount(result: { problems: ProblemEntry[]; total?: number; hasMore: boolean }): number {
+  return countOf(result).count;
+}
+
+/** "3", or "99+" when more problems are open than were counted. */
+export function problemCountLabel(result: { problems: ProblemEntry[]; total?: number; hasMore: boolean }): string {
+  const { count, cap } = countOf(result);
+  return result.hasMore ? `${cap}+` : String(count);
 }
 
 interface Preferences {
@@ -57,7 +85,7 @@ const LAST_RESULT_KEY = "menubar-problems:last-result";
 const LAST_FETCH_KEY = "menubar-problems:last-fetch";
 const PREFS_KEY = "menubar-problems:prefs";
 /** Bump when the parsing or shape of cached results changes: results cached by older code are then refetched. */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const DEFAULT_INTERVAL_MINUTES = 30;
 
 /** The fetch currently running in this process, shared by every loadProblems() call. */
@@ -88,7 +116,7 @@ async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<Pr
   try {
     // One extra record tells us whether to show "N+".
     const all = await listProblems(liveTransport, tenant, {
-      limit: MAX_SHOWN + 1,
+      limit: MAX_COUNTED + 1,
       lookback: prefs.lookback || "7d",
       extraFilter: prefs.extraFilter,
     });
@@ -98,7 +126,8 @@ async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<Pr
       tenantName: tenant.name,
       extraFilter: prefs.extraFilter?.trim() || undefined,
       problems: all.slice(0, MAX_SHOWN),
-      hasMore: all.length > MAX_SHOWN,
+      total: Math.min(all.length, MAX_COUNTED),
+      hasMore: all.length > MAX_COUNTED,
       fetchedAt: Date.now(),
     };
   } catch (err) {
@@ -118,12 +147,13 @@ export async function loadProblems(forced: boolean): Promise<ProblemsResult> {
   if (!tenant) return { state: "no-tenant" };
 
   // Tenant, credentials, scopes, lookback and filter all change what the cached result means.
+  // The Cache is plain files: credentials enter only as a hash, so a new secret or token
+  // (e.g. after an auth error) refetches at once instead of after the retry delay.
   const signature = JSON.stringify([
     CACHE_VERSION,
     tenant.id,
     tenant.tenantEndpoint,
-    tenant.clientId,
-    tenant.ssoEndpoint,
+    credentialsFingerprint(tenant),
     [...tenant.scopes].sort(),
     prefs.lookback,
     prefs.extraFilter,
@@ -159,7 +189,7 @@ async function fetchAndStore(tenant: TenantConfig, prefs: Preferences, signature
   const result = await fetchResult(tenant, prefs);
   debugLog(
     result.state === "ok"
-      ? `fetched ok: ${result.problems.length} problem(s)${result.hasMore ? "+" : ""}`
+      ? `fetched ok: ${problemCountLabel(result)} problem(s)`
       : `fetched ${result.state}${result.state === "error" ? `: ${result.error.summary}` : ""}`,
   );
   // Config errors (scopes, credentials, bad filter) are cached too, so the menu does not

@@ -16,6 +16,13 @@ export const LocalStorage = {
   _clear: () => _localStorageMap.clear(),
 };
 
+// Extension preferences; tests set them with _setPreferences.
+let _preferences: Record<string, unknown> = {};
+export const getPreferenceValues = jest.fn(() => _preferences);
+export const _setPreferences = (prefs: Record<string, unknown>) => {
+  _preferences = prefs;
+};
+
 export const showToast = jest.fn();
 
 export const Toast = {
@@ -34,3 +41,15 @@ export const Color = {
   Blue: "raycast-color-blue",
   SecondaryText: "raycast-color-secondary",
 };
+
+// Map-backed Cache mock (one shared store, like Cache without a namespace).
+const _cacheMap = new Map<string, string>();
+export class Cache {
+  get = (key: string) => _cacheMap.get(key);
+  set = (key: string, value: string) => {
+    _cacheMap.set(key, value);
+  };
+  static _clear = () => _cacheMap.clear();
+}
+
+export const environment = { isDevelopment: false, launchType: "userInitiated" };
