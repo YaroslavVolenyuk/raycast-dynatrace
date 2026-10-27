@@ -79,6 +79,22 @@ describe("buildTenantConfig", () => {
     expect(cfg.id).toBeTruthy();
   });
 
+  it.each([
+    ["https://abc.apps.dynatrace.com", DEFAULT_SSO_ENDPOINT],
+    ["https://abc.dev.apps.dynatracelabs.com", "https://sso-dev.dynatracelabs.com/sso/oauth2/token"],
+    ["https://abc.sprint.apps.dynatracelabs.com", "https://sso-sprint.dynatracelabs.com/sso/oauth2/token"],
+  ])("derives the SSO endpoint of %s when the field is blank", (tenantEndpoint, sso) => {
+    expect(buildTenantConfig(validValues({ tenantEndpoint, ssoEndpoint: "" })).ssoEndpoint).toBe(sso);
+  });
+
+  it("keeps an explicit SSO endpoint", () => {
+    const sso = "https://sso.example.com/token";
+    expect(
+      buildTenantConfig(validValues({ tenantEndpoint: "https://abc.dev.apps.dynatracelabs.com", ssoEndpoint: sso }))
+        .ssoEndpoint,
+    ).toBe(sso);
+  });
+
   it("reuses an existing id when editing", () => {
     expect(buildTenantConfig(validValues(), "fixed-id").id).toBe("fixed-id");
   });

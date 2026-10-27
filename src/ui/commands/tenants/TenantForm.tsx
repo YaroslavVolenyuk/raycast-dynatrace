@@ -215,8 +215,8 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
         <Form.TextField
           {...field("ssoEndpoint")}
           title="SSO Token Endpoint"
-          placeholder="Default: sso.dynatrace.com"
-          info="Leave blank to use sso.dynatrace.com. An OAuth client only works with the SSO it was created on — override only for special setups."
+          placeholder="Default: derived from the Environment URL"
+          info="Leave blank: sso.dynatrace.com for production environments, sso-dev / sso-sprint.dynatracelabs.com for dev and sprint ones. An OAuth client only works with the SSO it was created on — override only for special setups."
         />
       )}
     </Form>

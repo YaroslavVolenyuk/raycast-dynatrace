@@ -3,7 +3,7 @@
 // without rendering Raycast components.
 
 import type { TenantConfig } from "../../../sdk/auth";
-import { PROD_SSO_ENDPOINT, credentialsKind, findMissingScopes } from "../../../sdk/auth";
+import { PROD_SSO_ENDPOINT, credentialsKind, findMissingScopes, ssoEndpointFor } from "../../../sdk/auth";
 import {
   environmentUrlProblem,
   isHttpsUrl,
@@ -11,10 +11,7 @@ import {
   normalizeUrl,
 } from "../../../services/environmentUrl";
 
-/**
- * Dynatrace SSO token endpoint for production SaaS environments. Used when the
- * SSO field is blank; other environments set it manually in the form.
- */
+/** Dynatrace SSO token endpoint for production SaaS environments. */
 export const DEFAULT_SSO_ENDPOINT = PROD_SSO_ENDPOINT;
 
 /**
@@ -160,7 +157,8 @@ export function buildTenantConfig(values: TenantFormValues, existingId?: string)
     ...common,
     clientId: values.clientId.trim(),
     clientSecret: values.clientSecret.trim(),
-    ssoEndpoint: normalizeUrl(values.ssoEndpoint) || DEFAULT_SSO_ENDPOINT,
+    // Left blank: the SSO of the environment's stage (production, dev or sprint).
+    ssoEndpoint: normalizeUrl(values.ssoEndpoint) || ssoEndpointFor(common.tenantEndpoint),
   };
 }
 

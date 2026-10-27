@@ -132,8 +132,9 @@ If you work with more than one Dynatrace environment, add each as a
 separate tenant — token and OAuth tenants can be mixed.
 
 OAuth tenants authenticate with client-credentials against Dynatrace SSO. The
-SSO endpoint defaults to `sso.dynatrace.com` and can be overridden per tenant
-(advanced). A platform token is sent to the environment as is. Long-running
+SSO endpoint is derived from the environment URL (`sso.dynatrace.com`, or
+`sso-dev` / `sso-sprint.dynatracelabs.com` for dev and sprint environments)
+and can be overridden per tenant (advanced). A platform token is sent to the environment as is. Long-running
 Grail queries are polled automatically via the `query:poll` API, so results
 appear once the query completes without any extra action.
 

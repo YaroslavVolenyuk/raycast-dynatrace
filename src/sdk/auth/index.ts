@@ -17,7 +17,7 @@ export interface TenantConfig {
   tenantEndpoint: string; // e.g. https://abc123.live.dynatrace.com
   clientId: string;
   clientSecret: string;
-  ssoEndpoint: string; // default: derived from tenantEndpoint (prod/dev/sprint SSO)
+  ssoEndpoint: string; // default: derived from tenantEndpoint (ssoEndpointFor)
   scopes: string[]; // e.g. ["storage:logs:read", "storage:spans:read"]
   /**
    * Platform token (dt0s16.…), sent as the bearer token as is. When set, the
@@ -39,11 +39,25 @@ interface CachedToken {
 }
 
 // ── SSO endpoint ──────────────────────────────────────────────────────────────
-// SaaS prod environments use https://sso.dynatrace.com/sso/oauth2/token.
-// Other environments can set a custom SSO endpoint per tenant ("SSO endpoint
-// (advanced)" in Manage Tenants).
+// SaaS prod environments use https://sso.dynatrace.com/sso/oauth2/token; the
+// dev and sprint stages (<id>.dev.apps.dynatracelabs.com, <id>.sprint.…) have
+// their own SSO, and an OAuth client only works with the SSO it was created on.
+// Other setups set a custom SSO endpoint per tenant in Manage Tenants.
 
 export const PROD_SSO_ENDPOINT = "https://sso.dynatrace.com/sso/oauth2/token";
+
+const STAGE_SSO = /\.(dev|sprint)\.apps\.dynatracelabs\.com$/;
+
+/** The SSO token endpoint that belongs to an environment URL. */
+export function ssoEndpointFor(tenantEndpoint: string): string {
+  try {
+    const stage = new URL(tenantEndpoint).hostname.match(STAGE_SSO)?.[1];
+    if (stage) return `https://sso-${stage}.dynatracelabs.com/sso/oauth2/token`;
+  } catch {
+    // invalid URL — the form reports it; fall back to production
+  }
+  return PROD_SSO_ENDPOINT;
+}
 
 /** Extracts a human-readable reason from an OAuth error body (JSON or form). */
 function describeOAuthBody(body: string): string | null {
@@ -233,7 +247,7 @@ export async function validateTenantCredentials(
       // 404 / an HTML page: the "SSO endpoint" is not a token endpoint at all.
       const ssoHint =
         err.statusCode === 404 || err.body.trimStart().startsWith("<")
-          ? " — this is not an SSO token endpoint; leave SSO Token Endpoint blank to use sso.dynatrace.com"
+          ? " — this is not an SSO token endpoint; leave SSO Token Endpoint blank to use the one that belongs to the Environment URL"
           : "";
       return {
         valid: false,
