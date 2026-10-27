@@ -5,6 +5,7 @@ import { escapeDqlString } from "../../../sdk";
 import { formatLogContent } from "../../lib/formatLogContent";
 import { buildTraceUrl } from "../../lib/deepLinks";
 import { keyValueTable, fenceCode } from "../../lib/markdown";
+import type { TimeframeValue } from "../../lib/listArgs";
 import SearchTraces from "../search-traces/SearchTraces";
 import RunDql from "../run-dql/RunDql";
 
@@ -72,7 +73,16 @@ function buildLogContextQuery(raw: Record<string, unknown>, limit = 100): string
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
-export default function LogDetail({ entry, tenant }: { entry: LogEntry; tenant?: TenantConfig }) {
+export default function LogDetail({
+  entry,
+  tenant,
+  timeframe,
+}: {
+  entry: LogEntry;
+  tenant?: TenantConfig;
+  /** The Search Logs timeframe, so the trace is looked up as far back as the log. */
+  timeframe?: TimeframeValue;
+}) {
   const { push } = useNavigation();
   const raw = entry.raw as Record<string, unknown>;
   const baseUrl = tenant?.tenantEndpoint?.replace(/\/$/, "") ?? "";
@@ -232,7 +242,7 @@ export default function LogDetail({ entry, tenant }: { entry: LogEntry; tenant?:
               title="View Trace in Raycast"
               icon={Icon.MagnifyingGlass}
               shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
-              onAction={() => push(<SearchTraces initialTraceId={traceId} />)}
+              onAction={() => push(<SearchTraces initialTraceId={traceId} initialTimeframe={timeframe} />)}
             />
           )}
           {traceUrl && (

@@ -6,6 +6,7 @@ import {
   OPTIONAL_SCOPES,
   REQUIRED_SCOPES,
   describeScopeCheck,
+  ssoEndpointOverride,
   type TenantFormValues,
 } from "../tenantForm.helpers";
 import { normalizeUrl } from "../../../../services/environmentUrl";
@@ -215,5 +216,28 @@ describe("platform-token tenants in the form", () => {
   it("never reports a 403 from the environment as verified", () => {
     const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES, ...OPTIONAL_SCOPES] }, { accessDenied: true });
     expect(r).toMatchObject({ style: "failure", title: "Connected, but access denied" });
+  });
+});
+
+describe("ssoEndpointOverride (SSO field when editing)", () => {
+  it("is blank when the stored SSO is the one derived from the URL", () => {
+    const prod = { tenantEndpoint: "https://abc12345.apps.dynatrace.com", ssoEndpoint: DEFAULT_SSO_ENDPOINT };
+    expect(ssoEndpointOverride(prod)).toBe("");
+    // so moving the tenant to a dev URL derives the dev SSO on save
+    const edited = buildTenantConfig(
+      validValues({
+        tenantEndpoint: "https://abc12345.dev.apps.dynatracelabs.com",
+        ssoEndpoint: ssoEndpointOverride(prod),
+      }),
+    );
+    expect(edited.ssoEndpoint).toBe("https://sso-dev.dynatracelabs.com/sso/oauth2/token");
+  });
+
+  it("keeps a custom SSO endpoint", () => {
+    const custom = {
+      tenantEndpoint: "https://abc12345.apps.dynatrace.com",
+      ssoEndpoint: "https://sso.example.com/token",
+    };
+    expect(ssoEndpointOverride(custom)).toBe("https://sso.example.com/token");
   });
 });

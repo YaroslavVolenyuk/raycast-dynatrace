@@ -165,6 +165,12 @@ describe("buildSpansQuery", () => {
     expect(q).toContain('toString(`trace.id`) == "abc123"');
   });
 
+  it("trims and lowercases a pasted traceId", () => {
+    const q = buildSpansQuery({ traceId: "  4BF92F3577B34DA6 \n" });
+    expect(q).toContain('toString(`trace.id`) == "4bf92f3577b34da6"');
+    expect(buildSpansQuery({ traceId: "   " })).not.toContain("trace.id");
+  });
+
   it("escapes special chars in traceId", () => {
     const q = buildSpansQuery({ traceId: 'a"b' });
     expect(q).toContain('toString(`trace.id`) == "a\\"b"');

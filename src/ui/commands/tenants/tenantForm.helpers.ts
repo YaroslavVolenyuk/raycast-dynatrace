@@ -162,6 +162,15 @@ export function buildTenantConfig(values: TenantFormValues, existingId?: string)
   };
 }
 
+/**
+ * The SSO endpoint to show in the form: blank when it is the one derived from the
+ * environment URL, so a later change of the URL (prod → dev) derives a new one
+ * instead of keeping the old stage's SSO.
+ */
+export function ssoEndpointOverride(tenant: Pick<TenantConfig, "tenantEndpoint" | "ssoEndpoint">): string {
+  return tenant.ssoEndpoint === ssoEndpointFor(tenant.tenantEndpoint) ? "" : tenant.ssoEndpoint;
+}
+
 function generateTenantId(): string {
   // Node 22 (Raycast runtime) exposes globalThis.crypto.randomUUID.
   if (typeof globalThis.crypto?.randomUUID === "function") {

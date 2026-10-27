@@ -54,7 +54,7 @@ takes precedence. Like Dynatrace, results are capped at 1,000 records (and
 1 MB); add `| limit` to the query for fewer. When Grail reports that a result
 was truncated or a scan limit was hit, the result list says so. Every run is a
 billable query: a query still running after 3 minutes, or one you leave by
-closing the view, is cancelled in Dynatrace so it stops scanning. Results are listed with a
+closing the view, is canceled in Dynatrace so it stops scanning. Results are listed with a
 title column picked from the data, a filter over all fields, a details panel
 (⌘D), and copy actions for one record (JSON) or all records (JSON or CSV).
 The last query and timeframe are restored the next time the command opens.

@@ -13,6 +13,7 @@ import {
   REQUIRED_SCOPES,
   buildTenantConfig,
   describeScopeCheck,
+  ssoEndpointOverride,
   validateForm,
   type AuthType,
   type TenantFormValues,
@@ -39,7 +40,7 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
     platformToken: tenant?.platformToken ?? "",
     clientId: tenant?.clientId ?? "",
     clientSecret: tenant?.clientSecret ?? "",
-    ssoEndpoint: tenant?.ssoEndpoint ?? "",
+    ssoEndpoint: tenant ? ssoEndpointOverride(tenant) : "",
     scopes: (tenant?.scopes ?? REQUIRED_SCOPES).join("\n"),
   });
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof TenantFormValues, string>>>({});

@@ -7,7 +7,7 @@
 // extension. Preferences are extension-level for the same reason: both commands
 // must build the same query and cache signature.
 
-import { Cache, environment, getPreferenceValues } from "@raycast/api";
+import { Cache, getPreferenceValues } from "@raycast/api";
 import {
   credentialsFingerprint,
   liveTransport,
@@ -91,12 +91,6 @@ const DEFAULT_INTERVAL_MINUTES = 30;
 /** The fetch currently running in this process, shared by every loadProblems() call. */
 let inflight: Promise<ProblemsResult> | undefined;
 
-/** Dev-only trace of every menu bar wake-up (visible in the `ray develop` terminal). */
-function debugLog(message: string) {
-  if (environment.isDevelopment)
-    console.log(`[menubar-problems ${new Date().toISOString()} ${environment.launchType}] ${message}`);
-}
-
 const intervalMinutesOf = (prefs: Preferences) => Number(prefs.refreshMinutes) || DEFAULT_INTERVAL_MINUTES;
 
 function readCachedResult(): ProblemsResult | undefined {
@@ -161,21 +155,13 @@ export async function loadProblems(forced: boolean): Promise<ProblemsResult> {
   const signatureChanged = cache.get(PREFS_KEY) !== signature;
 
   // A fetch already running in this process is shared, never duplicated.
-  if (inflight) {
-    debugLog("join in-flight fetch");
-    return inflight;
-  }
+  if (inflight) return inflight;
 
   const last = readCachedResult();
   const lastFetchedAt = Number(cache.get(LAST_FETCH_KEY)) || undefined;
   const intervalMinutes = intervalMinutesOf(prefs);
   const force = forced || signatureChanged;
   const willFetch = !last || shouldFetch({ now: Date.now(), lastFetchedAt, intervalMinutes, force });
-  debugLog(
-    `${willFetch ? "FETCH" : "SKIP (fresh)"} forced=${forced} signatureChanged=${signatureChanged} ` +
-      `interval=${intervalMinutes}m (pref=${JSON.stringify(prefs.refreshMinutes)}) lastFetch=${lastFetchedAt ? new Date(lastFetchedAt).toISOString() : "never"} ` +
-      `cached=${last ? last.state : "none"}`,
-  );
   // Every query is billable: reuse the last result until the chosen interval has elapsed.
   if (last && !willFetch) return last;
 
@@ -187,11 +173,6 @@ export async function loadProblems(forced: boolean): Promise<ProblemsResult> {
 
 async function fetchAndStore(tenant: TenantConfig, prefs: Preferences, signature: string): Promise<ProblemsResult> {
   const result = await fetchResult(tenant, prefs);
-  debugLog(
-    result.state === "ok"
-      ? `fetched ok: ${problemCountLabel(result)} problem(s)`
-      : `fetched ${result.state}${result.state === "error" ? `: ${result.error.summary}` : ""}`,
-  );
   // Config errors (scopes, credentials, bad filter) are cached too, so the menu does not
   // re-query every wake-up while the user has not fixed anything.
   cache.set(LAST_RESULT_KEY, JSON.stringify(result));

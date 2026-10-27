@@ -12,7 +12,7 @@ import { liveTransport } from "../../../sdk";
 import { useActiveTenant } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
-import { pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
+import { TIMEFRAMES, pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
 import EmptyTenantState from "../../components/EmptyTenantState";
 import TenantActions, { ManageTenantsAction } from "../../components/TenantActions";
 import TraceDetail from "./TraceDetail";
@@ -54,11 +54,18 @@ function kindIcon(kind: string): Icon {
 
 /**
  * SearchTraces — can be launched as a top-level command (reads `arguments`) or
- * pushed via navigation from LogDetail (pass `initialTraceId` prop directly).
+ * pushed via navigation from LogDetail (pass `initialTraceId` and the log
+ * search's `initialTimeframe` directly).
  */
-export default function SearchTraces(props: { arguments?: CommandArguments; initialTraceId?: string }) {
+export default function SearchTraces(props: {
+  arguments?: CommandArguments;
+  initialTraceId?: string;
+  initialTimeframe?: TimeframeValue;
+}) {
   const { timeframe: timeframeArg, traceId: traceIdArg } = props.arguments ?? {};
-  const timeframeStr = pickTimeframe(timeframeArg);
+  const [timeframeStr, setTimeframe] = useState<TimeframeValue>(
+    () => props.initialTimeframe ?? pickTimeframe(timeframeArg),
+  );
   // initialTraceId takes priority (log → trace navigation); fall back to argument
   const initialTraceId = props.initialTraceId ?? traceIdArg;
 
@@ -147,12 +154,30 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
     );
   }
 
-  const navigationTitle = [initialTraceId ? `Trace ${initialTraceId.slice(0, 8)}…` : "Search Traces", tenant?.name]
-    .filter(Boolean)
-    .join(" · ");
+  // Only the view pushed from a log detail gets its own title: Raycast asks root
+  // commands to keep theirs, so the tenant goes in the section title instead.
+  const navigationTitle = props.initialTraceId ? `Trace ${props.initialTraceId.slice(0, 8)}…` : undefined;
   const sectionTitle = data
-    ? `${entries.length} span${entries.length === 1 ? "" : "s"} · ${timeframeTitle(timeframeStr)}`
+    ? [`${entries.length} span${entries.length === 1 ? "" : "s"}`, timeframeTitle(timeframeStr), tenant?.name]
+        .filter(Boolean)
+        .join(" · ")
     : undefined;
+  const timeframeActions = (
+    <ActionPanel.Submenu
+      title="Change Timeframe"
+      icon={Icon.Clock}
+      shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
+    >
+      {TIMEFRAMES.map((t) => (
+        <Action
+          key={t.value}
+          title={t.title}
+          icon={t.value === timeframeStr ? Icon.Checkmark : undefined}
+          onAction={() => setTimeframe(t.value)}
+        />
+      ))}
+    </ActionPanel.Submenu>
+  );
   const sectionSubtitle = skipped ? `${skipped} record${skipped === 1 ? "" : "s"} could not be read` : undefined;
 
   return (
@@ -177,9 +202,14 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
         description={emptyDescription(
           tenant,
           SPANS_REQUIRED_SCOPES,
-          "Try a different timeframe or remove the trace filter.",
+          "Try a longer timeframe (⌘⇧T) or remove the trace filter.",
         )}
-        actions={<ActionPanel>{tenantActions}</ActionPanel>}
+        actions={
+          <ActionPanel>
+            {timeframeActions}
+            {tenantActions}
+          </ActionPanel>
+        }
       />
       <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
         {entries.map((entry, index) => (
@@ -215,6 +245,7 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
                   shortcut={{ modifiers: ["cmd"], key: "r" }}
                   onAction={() => revalidate()}
                 />
+                {timeframeActions}
                 {tenantActions}
               </ActionPanel>
             }

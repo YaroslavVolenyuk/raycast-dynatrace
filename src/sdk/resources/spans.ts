@@ -202,7 +202,9 @@ export interface ListSpansOptions {
 }
 
 export function buildSpansQuery(opts: ListSpansOptions = {}): string {
-  const { status = "all", limit = SPAN_PAGE_SIZE, traceId, timeframeDql, timeframe } = opts;
+  const { status = "all", limit = SPAN_PAGE_SIZE, timeframeDql, timeframe } = opts;
+  // Grail renders trace IDs as lowercase hex; a pasted ID may carry spaces or capitals.
+  const traceId = opts.traceId?.trim().toLowerCase();
 
   const fetchClause = timeframeDql
     ? `fetch spans, from: now()-${timeframeDql}`

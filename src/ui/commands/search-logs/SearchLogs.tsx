@@ -104,9 +104,16 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
   // A full page means more logs probably exist in the timeframe.
   const canLoadMore = entries.length + skipped >= limit && limit < LOG_MAX_LIMIT;
 
-  const navigationTitle = tenant ? `Search Logs · ${tenant.name}` : undefined;
+  // The tenant goes in the section title: Raycast asks root commands to keep their navigation title.
   const sectionTitle = data
-    ? `${entries.length} log${entries.length === 1 ? "" : "s"} · ${timeframeTitle(timeframe)}${search ? ` · “${search}”` : ""}`
+    ? [
+        `${entries.length} log${entries.length === 1 ? "" : "s"}`,
+        timeframeTitle(timeframe),
+        search ? `“${search}”` : undefined,
+        tenant?.name,
+      ]
+        .filter(Boolean)
+        .join(" · ")
     : undefined;
   const sectionSubtitle = skipped
     ? `${skipped} record${skipped === 1 ? "" : "s"} could not be read`
@@ -181,7 +188,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
 
   if (error && !isLoading) {
     return (
-      <List isLoading={false} navigationTitle={navigationTitle}>
+      <List isLoading={false}>
         <List.EmptyView
           icon={Icon.Warning}
           title="Query Failed"
@@ -200,7 +207,6 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
   return (
     <List
       isLoading={isLoading || tenantLoading}
-      navigationTitle={navigationTitle}
       searchBarPlaceholder="Search log content or service in Dynatrace…"
       onSearchTextChange={setSearchText}
       searchBarAccessory={
@@ -243,7 +249,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
                 <Action
                   title="Open Details"
                   icon={Icon.ArrowRight}
-                  onAction={() => push(<LogDetail entry={entry} tenant={tenant ?? undefined} />)}
+                  onAction={() => push(<LogDetail entry={entry} tenant={tenant ?? undefined} timeframe={timeframe} />)}
                 />
                 <Action.CopyToClipboard title="Copy Log Content" content={entry.content} />
                 <Action.CopyToClipboard title="Copy Timestamp" content={entry.timestamp} />
