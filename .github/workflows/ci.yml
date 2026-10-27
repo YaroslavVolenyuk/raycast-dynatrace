@@ -29,7 +29,7 @@ jobs:
         run: npm run typecheck
 
       - name: Test
-        run: npm test
+        run: npm test -- --coverage
 
       - name: Build (Raycast CLI — the same gate the Store runs)
         run: npx ray build -e dist

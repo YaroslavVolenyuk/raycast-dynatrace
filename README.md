@@ -1,8 +1,9 @@
 # Dynatrace
 
-Dynatrace brings your Dynatrace environment into Raycast: manage multiple
-tenants, search Grail logs with DQL, and browse distributed traces, all
-without leaving your keyboard.
+Run DQL, search logs and traces, and watch open Davis problems in the menu
+bar — across multiple Dynatrace tenants, without leaving your keyboard.
+Exact DQL with syntax checks and autocomplete, results in seconds, no AI
+subscription needed.
 
 This is an independent, community-built extension. It is not an official
 Dynatrace product and is not affiliated with or endorsed by Dynatrace LLC.
@@ -11,10 +12,15 @@ Dynatrace product and is not affiliated with or endorsed by Dynatrace LLC.
 
 ### Manage Tenants
 
-Add, edit, test, and switch between multiple Dynatrace tenants. Each tenant
-is defined by its environment URL and an OAuth client (client ID and
-secret). Use this command to verify a tenant's credentials before relying on
-it, and to switch the active tenant used by the other commands.
+The one place where Dynatrace environments are set up. Each tenant has an
+environment URL and either a platform token or an OAuth client (client ID
+and secret). Test a tenant's credentials before relying on it, and switch the
+active tenant used by the other commands.
+
+Search Logs, Search Traces and Run DQL open the same list from their action
+panel (**Manage Tenants…**, ⌘⇧M), and Search Logs and Search Traces switch
+the active tenant with **Switch Tenant** (⌘⇧E), so setup never requires
+leaving the command you are in.
 
 ### Search Logs
 
@@ -52,7 +58,7 @@ closing the view, is cancelled in Dynatrace so it stops scanning. Results are li
 title column picked from the data, a filter over all fields, a details panel
 (⌘D), and copy actions for one record (JSON) or all records (JSON or CSV).
 The last query and timeframe are restored the next time the command opens.
-From a log detail, ⌘⇧D opens its DQL filter in Run DQL.
+From a log detail, ⌘⇧D opens its DQL filter in Run DQL and ⌘⇧Q copies it.
 
 Writing the query is assisted the way the Dynatrace editor does it:
 
@@ -68,38 +74,72 @@ template lists the scopes it needs; the default tenant scopes cover logs and
 spans only, so add `storage:events:read`, `storage:bizevents:read` or
 `storage:metrics:read` to use the other templates.
 
+### Problems in Menu Bar (macOS)
+
+Shows the number of open Davis problems in the menu bar, lists the newest
+ones and opens any of them in the Dynatrace Problems app. The refresh
+interval (15 minutes to 12 hours), the look-back window and an optional
+extra DQL filter are set in the extension preferences. Each refresh is a
+billable DQL query, so the menu bar reuses its last result until the
+interval has passed and shows when it was fetched. A failed fetch is never
+shown as "no problems": the icon turns yellow and the menu says what is
+wrong. Needs `storage:events:read`.
+
+### Refresh Problems (macOS)
+
+Fetches open problems now, ignoring the refresh interval, and updates the
+menu bar. The menu bar's Refresh item runs this command.
+
 ## Setup
 
+Run **Manage Tenants** (or **Add Tenant** in any command when nothing is set
+up yet) and add a tenant. Choose how it authenticates:
+
+**Platform token** — personal, no admin needed. Queries run with your own
+permissions.
+
+1. In Dynatrace, create a
+   [platform token](https://docs.dynatrace.com/docs/manage/identity-access-management/access-tokens-and-oauth-clients/platform-tokens)
+   (Account Management → My platform tokens) with the scopes below.
+2. In the tenant form, paste the environment URL and the token. List the
+   token's scopes in the Scopes field: Dynatrace cannot report them, and the
+   extension uses the list to warn about a missing scope before a query
+   silently returns nothing.
+
+**OAuth client** — a service client, usually created by an account admin.
+Queries run with the client's permissions, not yours.
+
 1. In Dynatrace, go to **Account Management → Identity & access management →
-   OAuth clients** and create a new OAuth client.
-2. Grant the client these scopes:
-   - `storage:buckets:read` (required for all searches — without it Dynatrace
-     returns empty results instead of an error)
-   - `storage:logs:read` (required for Search Logs)
-   - `storage:spans:read` (required for Search Traces)
-   - `storage:events:read` (optional, only for Problems in Menu Bar, macOS)
-3. In Raycast, run **Manage Tenants** and add a tenant. The scope field is
-   pre-filled with the three required scopes. If you use Problems in Menu
-   Bar, add `storage:events:read` there as well — a scope granted to the
-   OAuth client is only requested when it is listed in the tenant. You'll need:
-   - the environment URL, in the form `https://<environment-id>.apps.dynatrace.com`
-   - the OAuth client ID and client secret from step 1
-4. Use **Test** in Manage Tenants to confirm the credentials work before
-   using Search Logs or Search Traces.
+   OAuth clients** and create a new OAuth client with the scopes below.
+2. In the tenant form, paste the environment URL, client ID and secret. Only
+   the scopes listed in the tenant are requested, so list every scope you
+   need.
+
+Scopes:
+
+- `storage:buckets:read` (required for all searches — without it Dynatrace
+  returns empty results instead of an error)
+- `storage:logs:read` (required for Search Logs)
+- `storage:spans:read` (required for Search Traces)
+- `storage:events:read` (optional, only for Problems in Menu Bar, macOS)
+
+The form pre-fills the three required scopes. The environment URL has the form
+`https://<environment-id>.apps.dynatrace.com`; a URL copied from the browser
+address bar is fine. **Test & Save** checks the credentials and asks the
+environment to verify a query before the tenant is stored.
 
 If you work with more than one Dynatrace environment, add each as a
-separate tenant and switch the active tenant from the Manage Tenants
-command at any time.
+separate tenant — token and OAuth tenants can be mixed.
 
-Authentication uses OAuth 2.0 client-credentials against Dynatrace SSO. The
+OAuth tenants authenticate with client-credentials against Dynatrace SSO. The
 SSO endpoint defaults to `sso.dynatrace.com` and can be overridden per tenant
-(advanced). Long-running
+(advanced). A platform token is sent to the environment as is. Long-running
 Grail queries are polled automatically via the `query:poll` API, so results
 appear once the query completes without any extra action.
 
 ## Security
 
-Tenant configuration, including the OAuth client secret, is stored in
+Tenants, including platform tokens and OAuth client secrets, are stored in
 Raycast's LocalStorage, which is Raycast's encrypted local database. It stays
 on this machine and is not synced anywhere. Access tokens obtained from Dynatrace SSO are held in
 memory only for the lifetime of the Raycast process and are never
@@ -111,7 +151,7 @@ menu bar keeps its last problem list in Raycast's cache.
 The codebase is split into three layers with a hard, lint-enforced
 boundary:
 
-- `src/sdk` — a standalone Dynatrace client: OAuth authentication, Grail DQL
+- `src/sdk` — a standalone Dynatrace client: platform-token or OAuth authentication, Grail DQL
   execution, and resource modules with Zod schemas. It has no
   Raycast or React imports.
 - `src/services` — application logic. No `fetch` calls, no JSX.
@@ -134,13 +174,22 @@ npm test            # jest
 npm run knip        # unused files/exports/dependencies
 ```
 
-To send a sample trace to a tenant for manual testing of Search Traces, set
-`DT_TENANT_URL` and `DT_API_TOKEN` (a token with the
-`openTelemetryTrace.ingest` scope) in a local `.env` file (gitignored), then
-run:
+`scripts/` holds helpers for manual testing against a real tenant. They are
+not part of the extension and read their settings from a local `.env` file
+(gitignored):
+
+- `ingest-test-spans.mjs` sends one realistic trace, `ingest-test-traces.mjs`
+  sends many varied ones (statuses, durations, span kinds) and prints their
+  trace IDs. Both need `DT_TENANT_URL` and `DT_API_TOKEN` (a token with
+  `openTelemetryTrace.ingest`), and the OpenTelemetry packages named at the
+  top of each script, installed with `npm install --no-save`.
+- `check-problems.mjs` runs the menu bar's problems query with an OAuth
+  client (`DT_TENANT_URL`, `DT_CLIENT_ID`, `DT_CLIENT_SECRET`) and shows which
+  scopes the SSO granted. Useful when the menu bar shows nothing.
 
 ```bash
-node --env-file=.env scripts/ingest-test-spans.mjs
+node --env-file=.env scripts/ingest-test-traces.mjs 30
+node --env-file=.env scripts/check-problems.mjs
 ```
 
 ## License

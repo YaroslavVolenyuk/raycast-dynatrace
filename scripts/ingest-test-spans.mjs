@@ -5,7 +5,8 @@
  *   https://docs.dynatrace.com/docs/ingest-from/opentelemetry/otlp-api
  *
  * Prerequisites:
- *   npm install --no-save @opentelemetry/sdk-node @opentelemetry/exporter-trace-otlp-proto
+ *   npm install --no-save @opentelemetry/api@1 @opentelemetry/resources@2 \
+ *     @opentelemetry/sdk-node@0.200 @opentelemetry/exporter-trace-otlp-proto@0.200
  *
  *   DT_TENANT_URL  — e.g. https://abc12345.apps.dynatrace.com
  *   DT_API_TOKEN   — API token with scope: openTelemetryTrace.ingest
@@ -16,7 +17,7 @@
 
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
-import { Resource } from "@opentelemetry/resources";
+import { resourceFromAttributes } from "@opentelemetry/resources";
 import { context, trace, SpanKind, SpanStatusCode } from "@opentelemetry/api";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -36,7 +37,7 @@ const OTLP_URL = `${TENANT}/api/v2/otlp/v1/traces`;
 // ── SDK setup ─────────────────────────────────────────────────────────────────
 
 const sdk = new NodeSDK({
-  resource: new Resource({
+  resource: resourceFromAttributes({
     "service.name":           "order-service",
     "service.version":        "1.4.2",
     "deployment.environment": "production",

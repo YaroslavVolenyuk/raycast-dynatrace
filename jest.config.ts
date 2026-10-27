@@ -14,9 +14,20 @@ const config: Config = {
   transform: {
     "^.+\\.tsx?$": ["ts-jest", { tsconfig: "tsconfig.json" }],
   },
-  collectCoverageFrom: ["src/sdk/**/*.ts", "src/services/**/*.ts"],
-  // Coverage gates land in Phase 1 once the SDK has real code to cover.
-  // Plan target: 70% overall / 80% new / 90% for sdk/http + sdk/auth.
+  // All logic modules, src/ui included. React views (*.tsx) are left out: they
+  // are thin wrappers over these modules and are checked by hand in Raycast.
+  // Entry files (src/dt-*.ts) and index.ts files only re-export.
+  collectCoverageFrom: [
+    "src/**/*.ts",
+    "!src/dt-*.ts",
+    "!src/**/__tests__/**",
+    "!src/**/__mocks__/**",
+    "!src/**/index.ts",
+  ],
+  // A floor a few points under the current numbers, so a drop fails CI.
+  coverageThreshold: {
+    global: { statements: 82, branches: 78, functions: 80, lines: 82 },
+  },
 };
 
 export default config;

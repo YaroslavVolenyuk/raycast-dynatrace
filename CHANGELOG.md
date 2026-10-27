@@ -12,10 +12,12 @@ working with a Dynatrace environment from Raycast.
 ### Added
 
 - **Manage Tenants** — add, edit, test, and switch between multiple
-  Dynatrace tenants, each authenticated via its own OAuth client.
-- **Search Logs** — search Grail logs with DQL, filter by timeframe
-  (15m–7d), status level (error/warn/info/none), and result limit
-  (50–500), and open a detail view with a deep link to the matching log.
+  Dynatrace tenants, each authenticated with a platform token or an OAuth
+  client. Also reachable from Search Logs, Search Traces and Run DQL, which
+  can switch the active tenant in place.
+- **Search Logs** — search Grail logs in Dynatrace across the whole timeframe,
+  filter by status level and timeframe (15m–7d) inside the view, load more
+  results on demand, and open a detail view with links to the matching trace.
 - **Search Traces** — search Grail spans, filter by timeframe, span status,
   and trace ID, and open a detail view with a deep link into the
   Dynatrace Distributed Tracing explorer.
@@ -31,11 +33,3 @@ working with a Dynatrace environment from Raycast.
   optional extra DQL filter. A failed fetch is never shown as "no problems".
 - **Refresh Problems** (macOS) — fetch open problems now and update the menu
   bar; also behind the menu bar's Refresh item.
-- OAuth 2.0 client-credentials authentication against Dynatrace SSO, with
-  the required `storage:buckets:read`, `storage:logs:read` and
-  `storage:spans:read` scopes pre-filled when adding a tenant. The optional
-  `storage:events:read` scope for Problems in Menu Bar is added by hand.
-- Automatic polling of long-running Grail queries via the `query:poll` API.
-- A layered `src/sdk | services | ui` architecture with lint-enforced
-  boundaries, project tooling (TypeScript, ESLint, Prettier, Jest), and a
-  CI pipeline (lint, typecheck, tests, gitleaks secret scanning).
