@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { TenantConfig } from "../auth";
 import { escapeDqlString } from "../grail";
 import type { DynatraceTransport } from "../transport";
+import { normalizeRecords, type ResourcePage } from "./page";
 
 // ── 1. Raw API record schema ──────────────────────────────────────────────────
 // provenance: dt.semantic_dictionary.fields (verified via MCP execute_dql 2026-07-18)
@@ -232,13 +233,13 @@ export function buildSpansQuery(opts: ListSpansOptions = {}): string {
 
 /**
  * Fetches spans through the injected transport and returns normalized entries.
- * Records that fail schema validation are skipped.
+ * Records that fail schema validation are left out and counted in `skipped`.
  */
 export async function listSpans(
   transport: DynatraceTransport,
   tenant: TenantConfig,
   opts: ListSpansOptions = {},
-): Promise<SpanEntry[]> {
+): Promise<ResourcePage<SpanEntry>> {
   const query = buildSpansQuery(opts);
   const records = await transport.executeDql<unknown>(tenant, query, {
     timeframe: opts.timeframe,
@@ -247,10 +248,5 @@ export async function listSpans(
     requiredScopes: SPANS_REQUIRED_SCOPES,
   });
 
-  const entries: SpanEntry[] = [];
-  for (const record of records) {
-    const parsed = spanRecordSchema.safeParse(record);
-    if (parsed.success) entries.push(normalizeSpan(parsed.data));
-  }
-  return entries;
+  return normalizeRecords(records, spanRecordSchema, normalizeSpan);
 }

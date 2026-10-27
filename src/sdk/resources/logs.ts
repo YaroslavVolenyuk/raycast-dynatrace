@@ -13,7 +13,9 @@
 
 import { z } from "zod";
 import type { TenantConfig } from "../auth";
+import { escapeDqlString } from "../grail";
 import type { DynatraceTransport } from "../transport";
+import { normalizeRecords, type ResourcePage } from "./page";
 
 // ── 1. Raw API record schema ──────────────────────────────────────────────────
 // provenance: MCP execute_dql 2026-06-26 (fixture: sdk/resources/__fixtures__/logs.search.json)
@@ -26,8 +28,10 @@ import type { DynatraceTransport } from "../transport";
 export const logRecordSchema = z
   .object({
     timestamp: z.string(),
-    content: z.string(),
-    loglevel: z.string(), // raw level: NONE|INFO|WARN|ERROR|SEVERE|CRITICAL|ALERT|EMERGENCY|custom
+    // content and loglevel are absent on some ingest paths (e.g. structured
+    // OTLP logs with only attributes); such records are still shown, not dropped.
+    content: z.string().optional(),
+    loglevel: z.string().optional(), // raw level: NONE|INFO|WARN|ERROR|SEVERE|CRITICAL|ALERT|EMERGENCY|custom
     status: z.string().optional(), // normalized bucket: NONE|INFO|WARN|ERROR (always present in practice)
 
     // Service / app
@@ -75,8 +79,8 @@ export interface LogEntry {
 export function normalizeLog(record: LogRecord): LogEntry {
   return {
     timestamp: record.timestamp,
-    level: record.loglevel.toUpperCase(),
-    content: record.content,
+    level: (record.loglevel ?? record.status ?? "NONE").toUpperCase(),
+    content: record.content ?? "",
     service: record["service.name"],
     host: record["host.name"] ?? record["dt.entity.host"],
     status: record.status,
@@ -96,6 +100,8 @@ export function normalizeLog(record: LogRecord): LogEntry {
 export type LogLevel = "error" | "warn" | "info" | "none" | "all";
 
 export const LOG_PAGE_SIZE = 100;
+/** Upper bound for "Load More": Grail's default result cap. */
+export const LOG_MAX_LIMIT = 1000;
 
 /** `storage:buckets:read` is needed too: without it Grail returns empty results instead of a 403. */
 export const LOGS_REQUIRED_SCOPES = ["storage:buckets:read", "storage:logs:read"] as const;
@@ -112,6 +118,8 @@ const LOG_LEVEL_MAP: Record<LogLevel, string | null> = {
 export interface ListLogsOptions {
   level?: LogLevel;
   limit?: number;
+  /** Case-insensitive substring searched server-side in content and service.name. */
+  search?: string;
   /**
    * Relative timeframe string (e.g. "24h", "30m", "3d").
    * Embedded directly into the DQL fetch clause as `from: now()-{value}`.
@@ -125,6 +133,7 @@ export interface ListLogsOptions {
 /** Builds the `fetch logs` DQL string for the given filters. */
 export function buildLogsQuery(opts: ListLogsOptions = {}): string {
   const { level = "all", limit = LOG_PAGE_SIZE, timeframeDql, timeframe } = opts;
+  const search = opts.search?.trim();
 
   // Prefer relative DQL syntax (now()-Xh) so Grail always respects the window.
   // Fall back to absolute ISO range, then plain fetch logs.
@@ -140,6 +149,12 @@ export function buildLogsQuery(opts: ListLogsOptions = {}): string {
   if (mapped !== null) {
     parts.push(`filter status == "${mapped}"`);
   }
+  if (search) {
+    const s = escapeDqlString(search);
+    parts.push(
+      `filter contains(content, "${s}", caseSensitive: false) or contains(service.name, "${s}", caseSensitive: false)`,
+    );
+  }
   parts.push("sort timestamp desc");
   parts.push(`limit ${limit}`);
 
@@ -150,14 +165,14 @@ export function buildLogsQuery(opts: ListLogsOptions = {}): string {
 
 /**
  * Fetches logs through the injected transport and returns normalized entries.
- * Records that fail schema validation are skipped (a malformed row never breaks
- * the whole list).
+ * Records that fail schema validation are left out and counted in `skipped`
+ * (a malformed row never breaks the whole list, but is never hidden either).
  */
 export async function listLogs(
   transport: DynatraceTransport,
   tenant: TenantConfig,
   opts: ListLogsOptions = {},
-): Promise<LogEntry[]> {
+): Promise<ResourcePage<LogEntry>> {
   const query = buildLogsQuery(opts);
   const records = await transport.executeDql<unknown>(tenant, query, {
     timeframe: opts.timeframe,
@@ -166,10 +181,5 @@ export async function listLogs(
     requiredScopes: LOGS_REQUIRED_SCOPES,
   });
 
-  const entries: LogEntry[] = [];
-  for (const record of records) {
-    const parsed = logRecordSchema.safeParse(record);
-    if (parsed.success) entries.push(normalizeLog(parsed.data));
-  }
-  return entries;
+  return normalizeRecords(records, logRecordSchema, normalizeLog);
 }

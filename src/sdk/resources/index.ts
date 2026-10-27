@@ -12,6 +12,7 @@ export {
   buildLogsQuery,
   listLogs,
   LOG_PAGE_SIZE,
+  LOG_MAX_LIMIT,
   LOGS_REQUIRED_SCOPES,
   type LogRecord,
   type LogEntry,
@@ -45,6 +46,8 @@ export {
   type ProblemEntry,
   type ListProblemsOptions,
 } from "./problems";
+
+export { type ResourcePage } from "./page";
 
 export {
   runDql,

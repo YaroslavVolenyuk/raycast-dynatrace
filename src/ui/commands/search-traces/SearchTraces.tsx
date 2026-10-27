@@ -1,6 +1,6 @@
 import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   listSpans,
   formatDuration,
@@ -12,6 +12,7 @@ import { liveTransport } from "../../../sdk";
 import { useActiveTenant } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
+import { pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
 import EmptyTenantState from "../../components/EmptyTenantState";
 import TraceDetail from "./TraceDetail";
 
@@ -56,32 +57,35 @@ function kindIcon(kind: string): Icon {
  */
 export default function SearchTraces(props: { arguments?: CommandArguments; initialTraceId?: string }) {
   const { timeframe: timeframeArg, traceId: traceIdArg } = props.arguments ?? {};
-  const timeframeStr = timeframeArg || "24h";
+  const timeframeStr = pickTimeframe(timeframeArg);
   // initialTraceId takes priority (log → trace navigation); fall back to argument
   const initialTraceId = props.initialTraceId ?? traceIdArg;
 
   const { push } = useNavigation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<SpanStatus>("all");
+  const abortable = useRef<AbortController>(null);
 
   const { tenant, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
 
   const { data, isLoading, error, revalidate } = usePromise(
-    (tf: string, tid: string | undefined, st: SpanStatus, tenantId: string) => {
+    (tf: TimeframeValue, tid: string | undefined, st: SpanStatus, tenantId: string) => {
       void tenantId; // in the deps so a tenant switch refetches
       return listSpans(liveTransport, tenant!, {
         timeframeDql: tf,
         timeframe: parseTimeframe(tf),
         traceId: tid,
         status: st,
+        signal: abortable.current?.signal,
       });
     },
     [timeframeStr, initialTraceId, status, tenant?.id ?? ""],
-    { execute: !!tenant },
+    { execute: !!tenant, abortable },
   );
 
+  const skipped = data?.skipped ?? 0;
   const entries = useMemo<SpanEntry[]>(() => {
-    const all = data ?? [];
+    const all = data?.entries ?? [];
     if (!search) return all;
     const q = search.toLowerCase();
     return all.filter(
@@ -128,12 +132,18 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
     );
   }
 
-  const navigationTitle = initialTraceId ? `Trace ${initialTraceId.slice(0, 8)}…` : undefined;
+  const navigationTitle = [initialTraceId ? `Trace ${initialTraceId.slice(0, 8)}…` : "Search Traces", tenant?.name]
+    .filter(Boolean)
+    .join(" · ");
+  const sectionTitle = data
+    ? `${entries.length} span${entries.length === 1 ? "" : "s"} · ${timeframeTitle(timeframeStr)}`
+    : undefined;
+  const sectionSubtitle = skipped ? `${skipped} record${skipped === 1 ? "" : "s"} could not be read` : undefined;
 
   return (
     <List
       isLoading={isLoading || tenantLoading}
-      {...(navigationTitle ? { navigationTitle } : {})}
+      navigationTitle={navigationTitle}
       searchBarPlaceholder="Filter by operation, service, or trace ID…"
       onSearchTextChange={setSearch}
       searchBarAccessory={
@@ -155,38 +165,45 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
           "Try a different timeframe or remove the trace filter.",
         )}
       />
-      {entries.map((entry, index) => (
-        <List.Item
-          key={`${entry.traceId}-${entry.spanId}-${index}`}
-          icon={{ source: kindIcon(entry.kind), tintColor: statusColor(entry.statusCode) }}
-          title={{
-            value: `${entry.service ?? "Unknown service"}${entry.durationUs != null ? ` · ${formatDuration(entry.durationUs)}` : ""}`,
-            tooltip: entry.durationUs != null ? `Duration: ${formatDuration(entry.durationUs)}` : undefined,
-          }}
-          subtitle={entry.name.length > 55 ? entry.name.slice(0, 52) + "…" : entry.name}
-          accessories={[{ tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } }]}
-          actions={
-            <ActionPanel>
-              <Action
-                title="Open Details"
-                icon={Icon.ArrowRight}
-                onAction={() => push(<TraceDetail entry={entry} tenant={tenant ?? undefined} />)}
-              />
-              <Action.CopyToClipboard
-                title="Copy Trace ID"
-                content={entry.traceId}
-                shortcut={{ modifiers: ["cmd"], key: "t" }}
-              />
-              <Action.CopyToClipboard
-                title="Copy Span ID"
-                content={entry.spanId}
-                shortcut={{ modifiers: ["cmd"], key: "s" }}
-              />
-              <Action title="Refresh" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
-            </ActionPanel>
-          }
-        />
-      ))}
+      <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
+        {entries.map((entry, index) => (
+          <List.Item
+            key={`${entry.traceId}-${entry.spanId}-${index}`}
+            icon={{ source: kindIcon(entry.kind), tintColor: statusColor(entry.statusCode) }}
+            title={{
+              value: `${entry.service ?? "Unknown service"}${entry.durationUs != null ? ` · ${formatDuration(entry.durationUs)}` : ""}`,
+              tooltip: entry.durationUs != null ? `Duration: ${formatDuration(entry.durationUs)}` : undefined,
+            }}
+            subtitle={entry.name.length > 55 ? entry.name.slice(0, 52) + "…" : entry.name}
+            accessories={[{ tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } }]}
+            actions={
+              <ActionPanel>
+                <Action
+                  title="Open Details"
+                  icon={Icon.ArrowRight}
+                  onAction={() => push(<TraceDetail entry={entry} tenant={tenant ?? undefined} />)}
+                />
+                <Action.CopyToClipboard
+                  title="Copy Trace ID"
+                  content={entry.traceId}
+                  shortcut={{ modifiers: ["cmd"], key: "t" }}
+                />
+                <Action.CopyToClipboard
+                  title="Copy Span ID"
+                  content={entry.spanId}
+                  shortcut={{ modifiers: ["cmd"], key: "s" }}
+                />
+                <Action
+                  title="Refresh"
+                  icon={Icon.ArrowClockwise}
+                  shortcut={{ modifiers: ["cmd"], key: "r" }}
+                  onAction={() => revalidate()}
+                />
+              </ActionPanel>
+            }
+          />
+        ))}
+      </List.Section>
     </List>
   );
 }

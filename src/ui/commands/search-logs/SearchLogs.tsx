@@ -1,19 +1,31 @@
 import { List, ActionPanel, Action, Icon, Color, LaunchType, launchCommand, useNavigation } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
-import { useMemo, useState } from "react";
-import { listLogs, LOGS_REQUIRED_SCOPES, type LogEntry, type LogLevel } from "../../../sdk/resources";
+import { useRef, useState } from "react";
+import { listLogs, LOG_MAX_LIMIT, LOG_PAGE_SIZE, LOGS_REQUIRED_SCOPES, type LogLevel } from "../../../sdk/resources";
 import { liveTransport } from "../../../sdk";
-import { useActiveTenant } from "../../hooks";
+import { useActiveTenant, useDebouncedValue } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
+import {
+  LOG_LEVELS,
+  TIMEFRAMES,
+  pickLevel,
+  pickLimit,
+  pickTimeframe,
+  timeframeTitle,
+  type TimeframeValue,
+} from "../../lib/listArgs";
 import EmptyTenantState from "../../components/EmptyTenantState";
 import LogDetail from "./LogDetail";
 
 interface CommandArguments {
   timeframe?: string;
-  query?: LogLevel;
+  query?: string;
   limit?: string;
 }
+
+/** Server-side search runs a billable query, so wait for the user to stop typing. */
+const SEARCH_DEBOUNCE_MS = 500;
 
 // Dynatrace `status` field values (aggregated loglevel):
 //   ERROR → SEVERE | ERROR | CRITICAL | ALERT | FATAL | EMERGENCY
@@ -42,36 +54,88 @@ function relativeTime(timestamp: string): string {
 }
 
 export default function SearchLogs(props: { arguments: CommandArguments }) {
-  const { timeframe: timeframeArg, query, limit: limitArg } = props.arguments ?? {};
-  const level = (query || "all") as LogLevel;
-  const timeframeStr = timeframeArg || "24h";
-  const limit = limitArg ? parseInt(limitArg, 10) : undefined;
+  const args = props.arguments ?? {};
 
   const { push } = useNavigation();
-  const [search, setSearch] = useState("");
+  const [searchText, setSearchText] = useState("");
+  const search = useDebouncedValue(searchText.trim(), SEARCH_DEBOUNCE_MS);
+  const [level, setLevel] = useState<LogLevel>(() => pickLevel(args.query));
+  const [timeframe, setTimeframe] = useState<TimeframeValue>(() => pickTimeframe(args.timeframe));
+  const initialLimit = pickLimit(args.limit, LOG_MAX_LIMIT) ?? LOG_PAGE_SIZE;
+  const [loadedMore, setLoadedMore] = useState<{ key: string; limit: number }>();
+  const abortable = useRef<AbortController>(null);
 
   const { tenant, isLoading: tenantLoading, error: tenantError } = useActiveTenant();
 
+  // Load More raises the limit for the current search only: a new search text,
+  // level, timeframe or tenant starts again at the first page, not at up to 1,000
+  // billable records per keystroke.
+  const searchKey = JSON.stringify([search, level, timeframe, tenant?.id]);
+  const limit = loadedMore?.key === searchKey ? loadedMore.limit : initialLimit;
+
   const { data, isLoading, error, revalidate } = usePromise(
-    (lvl: LogLevel, tf: string, lim: number | undefined, tenantId: string) => {
+    (lvl: LogLevel, tf: TimeframeValue, lim: number, q: string, tenantId: string) => {
       void tenantId; // in the deps so a tenant switch refetches
       return listLogs(liveTransport, tenant!, {
         level: lvl,
         timeframeDql: tf,
         timeframe: parseTimeframe(tf),
         limit: lim,
+        search: q,
+        signal: abortable.current?.signal,
       });
     },
-    [level, timeframeStr, limit, tenant?.id ?? ""],
-    { execute: !!tenant },
+    [level, timeframe, limit, search, tenant?.id ?? ""],
+    { execute: !!tenant, abortable },
   );
 
-  const entries = useMemo<LogEntry[]>(() => {
-    const all = data ?? [];
-    if (!search) return all;
-    const q = search.toLowerCase();
-    return all.filter((e) => e.content.toLowerCase().includes(q) || (e.service ?? "").toLowerCase().includes(q));
-  }, [data, search]);
+  const entries = data?.entries ?? [];
+  const skipped = data?.skipped ?? 0;
+  // A full page means more logs probably exist in the timeframe.
+  const canLoadMore = entries.length + skipped >= limit && limit < LOG_MAX_LIMIT;
+
+  const navigationTitle = tenant ? `Search Logs · ${tenant.name}` : undefined;
+  const sectionTitle = data
+    ? `${entries.length} log${entries.length === 1 ? "" : "s"} · ${timeframeTitle(timeframe)}${search ? ` · “${search}”` : ""}`
+    : undefined;
+  const sectionSubtitle = skipped
+    ? `${skipped} record${skipped === 1 ? "" : "s"} could not be read`
+    : canLoadMore
+      ? "More available — ⌘L to load more"
+      : undefined;
+
+  const listActions = (
+    <ActionPanel.Section>
+      <Action
+        title="Refresh"
+        icon={Icon.ArrowClockwise}
+        shortcut={{ modifiers: ["cmd"], key: "r" }}
+        onAction={() => revalidate()}
+      />
+      {canLoadMore && (
+        <Action
+          title="Load More"
+          icon={Icon.Plus}
+          shortcut={{ modifiers: ["cmd"], key: "l" }}
+          onAction={() => setLoadedMore({ key: searchKey, limit: Math.min(limit + LOG_PAGE_SIZE, LOG_MAX_LIMIT) })}
+        />
+      )}
+      <ActionPanel.Submenu
+        title="Change Timeframe"
+        icon={Icon.Clock}
+        shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
+      >
+        {TIMEFRAMES.map((t) => (
+          <Action
+            key={t.value}
+            title={t.title}
+            icon={t.value === timeframe ? Icon.Checkmark : undefined}
+            onAction={() => setTimeframe(t.value)}
+          />
+        ))}
+      </ActionPanel.Submenu>
+    </ActionPanel.Section>
+  );
 
   // A corrupted tenant store must surface as an error, not as "no tenant".
   if (tenantError) {
@@ -92,7 +156,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
 
   if (error && !isLoading) {
     return (
-      <List isLoading={false}>
+      <List isLoading={false} navigationTitle={navigationTitle}>
         <List.EmptyView
           icon={Icon.Warning}
           title="Query Failed"
@@ -115,45 +179,59 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
   return (
     <List
       isLoading={isLoading || tenantLoading}
-      searchBarPlaceholder="Filter by content or service…"
-      onSearchTextChange={setSearch}
-      throttle
+      navigationTitle={navigationTitle}
+      searchBarPlaceholder="Search log content or service in Dynatrace…"
+      onSearchTextChange={setSearchText}
+      searchBarAccessory={
+        <List.Dropdown tooltip="Log level" value={level} onChange={(v) => setLevel(pickLevel(v))}>
+          {LOG_LEVELS.map((l) => (
+            <List.Dropdown.Item key={l.value} title={l.title} value={l.value} />
+          ))}
+        </List.Dropdown>
+      }
     >
       <List.EmptyView
         icon={Icon.MagnifyingGlass}
-        title="No logs found"
-        description={emptyDescription(tenant, LOGS_REQUIRED_SCOPES, "Try a different log level, timeframe, or search.")}
+        title={searchText.trim() !== search ? "Searching…" : "No logs found"}
+        description={emptyDescription(
+          tenant,
+          LOGS_REQUIRED_SCOPES,
+          `Nothing in ${timeframeTitle(timeframe).toLowerCase()}. Try another level, a longer timeframe (⌘⇧T), or different search text.`,
+        )}
+        actions={<ActionPanel>{listActions}</ActionPanel>}
       />
-      {entries.map((entry, index) => (
-        <List.Item
-          key={`${entry.timestamp}-${index}`}
-          icon={{ source: Icon.Document, tintColor: levelColor(entry.level) }}
-          title={{
-            value: `${entry.service ?? "Unknown service"} · ${relativeTime(entry.timestamp)}`,
-            tooltip: entry.timestamp,
-          }}
-          subtitle={(() => {
-            // Strip leading [service-name] prefix since the title already shows the service
-            const stripped = entry.content.replace(/^\[[^\]]+\]\s*/, "");
-            return stripped.length > 55 ? stripped.slice(0, 52) + "…" : stripped;
-          })()}
-          accessories={[
-            { tag: { value: entry.status ?? entry.level, color: levelColor(entry.status ?? entry.level) } },
-          ]}
-          actions={
-            <ActionPanel>
-              <Action
-                title="Open Details"
-                icon={Icon.ArrowRight}
-                onAction={() => push(<LogDetail entry={entry} tenant={tenant ?? undefined} />)}
-              />
-              <Action.CopyToClipboard title="Copy Log Content" content={entry.content} />
-              <Action.CopyToClipboard title="Copy Timestamp" content={entry.timestamp} />
-              <Action title="Refresh" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
-            </ActionPanel>
-          }
-        />
-      ))}
+      <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
+        {entries.map((entry, index) => (
+          <List.Item
+            key={`${entry.timestamp}-${index}`}
+            icon={{ source: Icon.Document, tintColor: levelColor(entry.level) }}
+            title={{
+              value: `${entry.service ?? "Unknown service"} · ${relativeTime(entry.timestamp)}`,
+              tooltip: entry.timestamp,
+            }}
+            subtitle={(() => {
+              // Strip leading [service-name] prefix since the title already shows the service
+              const stripped = entry.content.replace(/^\[[^\]]+\]\s*/, "");
+              return stripped.length > 55 ? stripped.slice(0, 52) + "…" : stripped;
+            })()}
+            accessories={[
+              { tag: { value: entry.status ?? entry.level, color: levelColor(entry.status ?? entry.level) } },
+            ]}
+            actions={
+              <ActionPanel>
+                <Action
+                  title="Open Details"
+                  icon={Icon.ArrowRight}
+                  onAction={() => push(<LogDetail entry={entry} tenant={tenant ?? undefined} />)}
+                />
+                <Action.CopyToClipboard title="Copy Log Content" content={entry.content} />
+                <Action.CopyToClipboard title="Copy Timestamp" content={entry.timestamp} />
+                {listActions}
+              </ActionPanel>
+            }
+          />
+        ))}
+      </List.Section>
     </List>
   );
 }

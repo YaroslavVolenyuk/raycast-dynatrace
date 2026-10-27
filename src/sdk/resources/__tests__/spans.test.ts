@@ -194,15 +194,17 @@ describe("listSpans", () => {
   });
 
   it("returns normalized entries from the transport", async () => {
-    const entries = await listSpans(fakeTransport(fixture.records), TENANT);
+    const { entries, skipped } = await listSpans(fakeTransport(fixture.records), TENANT);
+    expect(skipped).toBe(0);
     expect(entries).toHaveLength(fixture.records.length);
     const errorEntry = entries.find((e) => e.statusCode === "ERROR");
     expect(errorEntry?.dbSystem).toBe("postgresql");
   });
 
-  it("skips records that fail schema validation", async () => {
+  it("leaves out and counts records that fail schema validation", async () => {
     const dirty = [fixture.records[0], { "span.id": "no-trace" }]; // missing trace.id
-    const entries = await listSpans(fakeTransport(dirty), TENANT);
+    const { entries, skipped } = await listSpans(fakeTransport(dirty), TENANT);
     expect(entries).toHaveLength(1);
+    expect(skipped).toBe(1);
   });
 });

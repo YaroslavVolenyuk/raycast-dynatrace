@@ -72,6 +72,18 @@ describe("normalizeLog", () => {
 // ── Query builder ─────────────────────────────────────────────────────────────
 
 describe("buildLogsQuery", () => {
+  it("searches content and service server-side, case-insensitively and escaped", () => {
+    const q = buildLogsQuery({ search: '  say "hi"\\ ' });
+    expect(q).toContain(
+      'filter contains(content, "say \\"hi\\"\\\\", caseSensitive: false) or contains(service.name, "say \\"hi\\"\\\\", caseSensitive: false)',
+    );
+    expect(q.indexOf("filter contains")).toBeLessThan(q.indexOf("sort timestamp"));
+  });
+
+  it("adds no search filter for blank search text", () => {
+    expect(buildLogsQuery({ search: "   " })).not.toContain("contains(");
+  });
+
   it("adds no level filter for 'all'", () => {
     expect(buildLogsQuery({ level: "all" })).not.toContain("filter status");
   });
@@ -122,15 +134,26 @@ describe("listLogs", () => {
   });
 
   it("returns normalized entries from the transport", async () => {
-    const entries = await listLogs(fakeTransport(fixture.records), TENANT, { level: "all" });
+    const { entries, skipped } = await listLogs(fakeTransport(fixture.records), TENANT, { level: "all" });
+    expect(skipped).toBe(0);
     expect(entries).toHaveLength(fixture.records.length);
     const errorEntry = entries.find((e) => e.level === "ERROR");
     expect(errorEntry?.service).toBe("function-runner");
   });
 
-  it("skips records that fail schema validation", async () => {
-    const dirty = [fixture.records[0], { loglevel: "ERROR" } /* missing timestamp+content */];
-    const entries = await listLogs(fakeTransport(dirty), TENANT);
+  it("leaves out and counts records that fail schema validation", async () => {
+    const dirty = [fixture.records[0], { loglevel: "ERROR" } /* missing timestamp */];
+    const { entries, skipped } = await listLogs(fakeTransport(dirty), TENANT);
     expect(entries).toHaveLength(1);
+    expect(skipped).toBe(1);
+  });
+
+  it("keeps records without content or loglevel", async () => {
+    const { entries, skipped } = await listLogs(
+      fakeTransport([{ timestamp: "2026-10-26T10:00:00Z", status: "WARN", "service.name": "svc" }]),
+      TENANT,
+    );
+    expect(skipped).toBe(0);
+    expect(entries[0]).toMatchObject({ level: "WARN", content: "", service: "svc" });
   });
 });

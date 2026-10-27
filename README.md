@@ -18,11 +18,14 @@ it, and to switch the active tenant used by the other commands.
 
 ### Search Logs
 
-Search Grail logs using DQL. Filter by:
+Search Grail logs. The search text is matched in Dynatrace (log content and
+service name, case-insensitive) across the whole timeframe, not only in the
+logs already loaded. Each search runs a billable DQL query, so it waits until
+you stop typing. Also:
 
-- timeframe presets from 15 minutes to 7 days
-- status level: error, warn, info, or none
-- result limit: 50 to 500
+- status level (error, warn, info, none) in the dropdown next to the search bar
+- timeframe presets from 15 minutes to 7 days (⌘⇧T, or the command argument)
+- 100 logs at a time; ⌘L loads more, up to 1,000
 
 Selecting a log entry opens a detail view with its fields rendered as
 markdown. When the log carries a trace ID, the detail view links to that
@@ -30,7 +33,9 @@ trace in Distributed Traces and in Search Traces.
 
 ### Search Traces
 
-Search Grail spans. Filter by timeframe, span status, or trace ID. Selecting
+Search Grail spans. Filter by timeframe, span status, or trace ID. Both
+search commands show the active tenant in the title, and say so when some
+records could not be read instead of hiding them. Selecting
 a span opens a detail view, with a deep link into the Dynatrace Distributed
 Tracing explorer for the corresponding trace.
 
