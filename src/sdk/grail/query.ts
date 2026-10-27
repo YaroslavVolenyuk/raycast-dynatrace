@@ -4,7 +4,7 @@
 
 import { ZodError } from "zod";
 import { getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
-import { grailResponseSchema } from "./schema";
+import { grailResponseSchema, type GrailNotification } from "./schema";
 import { environmentNetworkError, isNetworkError, ssoNetworkError } from "./network";
 
 export interface GrailQueryOptions {
@@ -18,6 +18,8 @@ export interface GrailQueryOptions {
   pollDeadlineMs?: number;
   /** Scopes the calling resource needs; named in the 403 error message. */
   requiredScopes?: readonly string[];
+  /** Receives Grail's result notifications (truncation, scan limit, …) of a successful query. */
+  onNotifications?: (notifications: GrailNotification[]) => void;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -31,6 +33,8 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // polling until SUCCEEDED/FAILED or the overall deadline expires.
 const POLL_REQUEST_TIMEOUT_MS = 5_000;
 const DEFAULT_POLL_DEADLINE_MS = 60_000;
+/** query:cancel is best-effort cleanup; never let it hold up the caller for long. */
+const CANCEL_TIMEOUT_MS = 5_000;
 
 const BASE_PAYLOAD = {
   defaultSamplingRatio: 1,
@@ -155,17 +159,26 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
   let parsedResponse = parseGrailBody(rawText);
 
   // Long-running query: poll query:poll with the request token until it
-  // finishes or the deadline expires.
+  // finishes or the deadline expires. If we give up for any reason (deadline,
+  // abort, poll error) the query is cancelled server-side: otherwise it keeps
+  // scanning — and billing — with nobody waiting for the result.
   const deadline = Date.now() + (options.pollDeadlineMs ?? DEFAULT_POLL_DEADLINE_MS);
-  while (parsedResponse.state !== "SUCCEEDED" && parsedResponse.state !== "FAILED") {
-    const token = parsedResponse.requestToken;
-    if (!token) {
-      throw new Error(`Query state is ${parsedResponse.state} but Dynatrace returned no request token to poll`);
+  let runningToken: string | undefined;
+  try {
+    while (parsedResponse.state !== "SUCCEEDED" && parsedResponse.state !== "FAILED") {
+      const token = parsedResponse.requestToken;
+      if (!token) {
+        throw new Error(`Query state is ${parsedResponse.state} but Dynatrace returned no request token to poll`);
+      }
+      runningToken = token;
+      if (Date.now() >= deadline) {
+        throw new Error("Query did not finish in time — narrow the timeframe or reduce data volume");
+      }
+      parsedResponse = await pollGrailQuery(tenant, token, userSignal, timeoutMs);
     }
-    if (Date.now() >= deadline) {
-      throw new Error("Query did not finish in time — narrow the timeframe or reduce data volume");
-    }
-    parsedResponse = await pollGrailQuery(tenant, token, userSignal, timeoutMs);
+  } catch (pollErr) {
+    if (runningToken) void cancelGrailQuery(tenant, runningToken);
+    throw pollErr;
   }
 
   if (parsedResponse.state === "FAILED" || parsedResponse.error) {
@@ -173,7 +186,30 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
     throw new Error(err ? `Dynatrace: ${err.message} (code ${err.code})` : "Dynatrace: query failed");
   }
 
+  const notifications = parsedResponse.result?.metadata?.grail?.notifications;
+  if (notifications?.length) options.onNotifications?.(notifications);
+
   return (parsedResponse.result?.records ?? []) as T[];
+}
+
+/**
+ * Cancels a running query (POST query:cancel). Best-effort and never throws:
+ * the query may already have finished, or the network may be gone.
+ */
+export async function cancelGrailQuery(tenant: TenantConfig, requestToken: string): Promise<void> {
+  try {
+    const accessToken = await getAccessToken(tenant);
+    const endpoint =
+      `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/query:cancel` +
+      `?request-token=${encodeURIComponent(requestToken)}`;
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(CANCEL_TIMEOUT_MS),
+    });
+  } catch {
+    // ignore — cancellation is cleanup, not part of the result
+  }
 }
 
 /** Parses a Grail response body, rejecting HTML and unexpected shapes. */

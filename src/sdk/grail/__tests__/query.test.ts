@@ -235,6 +235,84 @@ describe("long-running query polling", () => {
 
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 410 while polling");
   });
+
+  /** Lets the fire-and-forget cancel request reach fetch. */
+  const flush = () => new Promise((r) => setImmediate(r));
+  const cancelCalls = () =>
+    mockFetch.mock.calls.filter(([url]) => String(url).includes("/platform/storage/query/v1/query:cancel"));
+
+  it("cancels the query server-side when the deadline expires", async () => {
+    mockFetch.mockResolvedValue(grailRunning("tok+en="));
+
+    await expect(executeDqlQuery(TENANT, "fetch logs", { pollDeadlineMs: 0 })).rejects.toThrow();
+    await flush();
+
+    expect(cancelCalls()).toHaveLength(1);
+    const [url, init] = cancelCalls()[0];
+    expect(url).toContain(`request-token=${encodeURIComponent("tok+en=")}`);
+    expect(init).toMatchObject({ method: "POST" });
+  });
+
+  it("cancels the query server-side when the caller aborts while polling", async () => {
+    const ctrl = new AbortController();
+    mockFetch.mockResolvedValueOnce(grailRunning("tok")).mockImplementationOnce(async () => {
+      ctrl.abort();
+      throw Object.assign(new Error("aborted"), { name: "AbortError" });
+    });
+
+    await expect(executeDqlQuery(TENANT, "fetch logs", { signal: ctrl.signal })).rejects.toThrow("aborted");
+    await flush();
+
+    expect(cancelCalls()).toHaveLength(1);
+  });
+
+  it("does not cancel a query that finished", async () => {
+    mockFetch.mockResolvedValueOnce(grailRunning("tok")).mockResolvedValueOnce(grailOk([]));
+
+    await executeDqlQuery(TENANT, "fetch logs");
+    await flush();
+
+    expect(cancelCalls()).toHaveLength(0);
+  });
+
+  it("swallows errors from the cancel request", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes("query:cancel")) throw new Error("offline");
+      return grailRunning("tok");
+    });
+
+    await expect(executeDqlQuery(TENANT, "fetch logs", { pollDeadlineMs: 0 })).rejects.toThrow("did not finish");
+    await flush();
+  });
+});
+
+describe("result notifications", () => {
+  it("passes Grail notifications to onNotifications", async () => {
+    const notifications = [{ severity: "WARNING", notificationType: "RESULT_TRUNCATED", message: "Result truncated" }];
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({ state: "SUCCEEDED", result: { records: [], metadata: { grail: { notifications } } } }),
+    });
+    const onNotifications = jest.fn();
+
+    await executeDqlQuery(TENANT, "fetch logs", { onNotifications });
+
+    expect(onNotifications).toHaveBeenCalledWith([expect.objectContaining(notifications[0])]);
+  });
+
+  it("ignores metadata in an unexpected shape", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ state: "SUCCEEDED", result: { records: [{ a: 1 }], metadata: "weird" } }),
+    });
+    const onNotifications = jest.fn();
+
+    expect(await executeDqlQuery(TENANT, "fetch logs", { onNotifications })).toEqual([{ a: 1 }]);
+    expect(onNotifications).not.toHaveBeenCalled();
+  });
 });
 
 describe("auth errors from getAccessToken", () => {

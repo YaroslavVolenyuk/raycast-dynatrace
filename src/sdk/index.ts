@@ -22,6 +22,8 @@ export {
   escapeDqlString,
   grailResponseSchema,
   executeDqlQuery,
+  cancelGrailQuery,
+  type GrailNotification,
   testTenantConnection,
   type GrailQueryOptions,
   type ConnectionTestResult,
