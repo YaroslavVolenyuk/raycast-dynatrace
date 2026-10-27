@@ -115,12 +115,12 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
           <Action.CopyToClipboard
             title="Copy Trace ID"
             content={entry.traceId}
-            shortcut={{ modifiers: ["cmd"], key: "t" }}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
           />
           <Action.CopyToClipboard
             title="Copy Span ID"
             content={entry.spanId}
-            shortcut={{ modifiers: ["cmd"], key: "s" }}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
           />
           {traceUrl && <Action.CopyToClipboard title="Copy Trace Link" content={traceUrl} />}
         </ActionPanel>

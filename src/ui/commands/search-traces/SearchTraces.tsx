@@ -186,12 +186,12 @@ export default function SearchTraces(props: { arguments?: CommandArguments; init
                 <Action.CopyToClipboard
                   title="Copy Trace ID"
                   content={entry.traceId}
-                  shortcut={{ modifiers: ["cmd"], key: "t" }}
+                  shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
                 />
                 <Action.CopyToClipboard
                   title="Copy Span ID"
                   content={entry.spanId}
-                  shortcut={{ modifiers: ["cmd"], key: "s" }}
+                  shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
                 />
                 <Action
                   title="Refresh"

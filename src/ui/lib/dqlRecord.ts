@@ -78,10 +78,19 @@ export function recordMatches(record: Record<string, unknown>, search: string): 
   return Object.values(record).some((v) => formatValueFull(v).toLowerCase().includes(q));
 }
 
-/** RFC 4180 CSV of the records, one column per DQL field. */
+// A cell starting with one of these is run as a formula by Excel, Numbers and
+// Sheets; log content is attacker-controlled (e.g. `=HYPERLINK(...)`).
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/**
+ * RFC 4180 CSV of the records, one column per DQL field. Text that a
+ * spreadsheet would evaluate as a formula is prefixed with `'` (OWASP); plain
+ * numbers such as -1 are left alone.
+ */
 export function toCsv(records: readonly Record<string, unknown>[], columns: readonly string[]): string {
   const cell = (v: unknown) => {
-    const text = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    let text = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    if (typeof v !== "number" && typeof v !== "bigint" && FORMULA_START.test(text)) text = `'${text}`;
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
   return [columns.map(cell).join(","), ...records.map((r) => columns.map((c) => cell(r[c])).join(","))].join("\n");

@@ -251,7 +251,7 @@ export default function LogDetail({ entry, tenant }: { entry: LogEntry; tenant?:
           <Action.CopyToClipboard
             title="Copy DQL Filter"
             content={dqlFilter}
-            shortcut={{ modifiers: ["cmd"], key: "d" }}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "q" }}
           />
           <Action.CopyToClipboard title="Copy Log Content" content={entry.content} />
           <Action.CopyToClipboard title="Copy Timestamp" content={entry.timestamp} />

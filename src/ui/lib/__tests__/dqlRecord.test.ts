@@ -47,6 +47,18 @@ describe("toCsv", () => {
     const csv = toCsv([{ a: 'x,"y"', b: "l1\nl2" }, { a: 1 }], ["a", "b"]);
     expect(csv).toBe('a,b\n"x,""y""","l1\nl2"\n1,');
   });
+
+  it("neutralizes text a spreadsheet would run as a formula", () => {
+    const csv = toCsv(
+      [{ a: '=HYPERLINK("http://x")', b: "+1", c: "@SUM(A1)", d: "-cmd", e: "\tx" }],
+      ["a", "b", "c", "d", "e"],
+    );
+    expect(csv.split("\n")[1]).toBe(`"'=HYPERLINK(""http://x"")",'+1,'@SUM(A1),'-cmd,'\tx`);
+  });
+
+  it("keeps numbers and ordinary text as they are", () => {
+    expect(toCsv([{ n: -1, s: "a=b", t: "1-2" }], ["n", "s", "t"]).split("\n")[1]).toBe("-1,a=b,1-2");
+  });
 });
 
 describe("recordMarkdownTable", () => {
