@@ -1,80 +1,32 @@
-import { isValidElement, type ReactElement, type ReactNode } from "react";
+import type { ReactElement } from "react";
 import type { LogEntry, LogRecord, TenantConfig } from "../../../../sdk";
+import { serialize as serializeTree } from "../../../__tests__/raycastTree";
 import LogDetail from "../LogDetail";
 
 // LogDetail is rendered by calling it as a function (no React renderer in the
 // test setup): the Raycast components are named stubs, so the returned element
 // tree can be serialized and pinned.
-jest.mock("@raycast/api", () => {
-  const stub = (name: string) => Object.assign(() => null, { displayName: name });
-  const TagList = Object.assign(stub("Detail.Metadata.TagList"), { Item: stub("Detail.Metadata.TagList.Item") });
-  const Metadata = Object.assign(stub("Detail.Metadata"), {
-    Label: stub("Detail.Metadata.Label"),
-    Link: stub("Detail.Metadata.Link"),
-    Separator: stub("Detail.Metadata.Separator"),
-    TagList,
-  });
-  return {
-    ...jest.requireActual("@raycast/api"),
-    Detail: Object.assign(stub("Detail"), { Metadata }),
-    ActionPanel: stub("ActionPanel"),
-    Action: Object.assign(stub("Action"), {
-      OpenInBrowser: stub("Action.OpenInBrowser"),
-      CopyToClipboard: stub("Action.CopyToClipboard"),
-    }),
-    Icon: { MagnifyingGlass: "icon-magnifying-glass", Terminal: "icon-terminal" },
-    useNavigation: () => ({ push: mockPush }),
-  };
-});
+jest.mock("@raycast/api", () => ({
+  ...jest.requireActual("@raycast/api"),
+  ...jest
+    .requireActual<typeof import("../../../__tests__/raycastTree")>("../../../__tests__/raycastTree")
+    .raycastStubs(),
+  Icon: { MagnifyingGlass: "icon-magnifying-glass", Terminal: "icon-terminal" },
+  useNavigation: () => ({ push: mockPush }),
+}));
 jest.mock("../../search-traces/SearchTraces", () => Object.assign(() => null, { displayName: "SearchTraces" }));
 jest.mock("../../run-dql/RunDql", () => Object.assign(() => null, { displayName: "RunDql" }));
 
 const mockPush = jest.fn();
 
-type Node = { type: string; props: Record<string, unknown>; children?: Node[]; pushes?: Node } | string;
-
-function typeName(type: unknown): string {
-  if (typeof type === "string") return type;
-  return (type as { displayName?: string }).displayName ?? "Unknown";
+// Runs an action's handler and returns what it pushed, so push targets and props are pinned.
+function runAction(onAction: () => void) {
+  mockPush.mockClear();
+  onAction();
+  return mockPush.mock.calls[0]?.[0] as ReactElement<Record<string, unknown>> | undefined;
 }
 
-// Flattens fragments and drops empty children so the output reflects what Raycast renders.
-function serializeChildren(children: ReactNode): Node[] {
-  const list = Array.isArray(children) ? children : [children];
-  return list.flatMap((c): Node[] => {
-    if (c == null || typeof c === "boolean") return [];
-    if (Array.isArray(c)) return serializeChildren(c);
-    if (!isValidElement(c)) return [String(c)];
-    const el = c as ReactElement<Record<string, unknown>>;
-    if (typeof el.type === "symbol") return serializeChildren(el.props.children as ReactNode);
-    return [serialize(el)];
-  });
-}
-
-function serialize(el: ReactElement<Record<string, unknown>>): Node {
-  const props: Record<string, unknown> = {};
-  let pushes: Node | undefined;
-  for (const [k, v] of Object.entries(el.props)) {
-    if (k === "children") continue;
-    if (isValidElement(v)) props[k] = serialize(v as ReactElement<Record<string, unknown>>);
-    else if (typeof v === "function") {
-      props[k] = "[Function]";
-      if (k === "onAction") {
-        mockPush.mockClear();
-        (v as () => void)();
-        const pushed = mockPush.mock.calls[0]?.[0] as ReactElement<Record<string, unknown>> | undefined;
-        if (pushed) pushes = serialize(pushed);
-      }
-    } else props[k] = v;
-  }
-  const children = serializeChildren(el.props.children as ReactNode);
-  return {
-    type: typeName(el.type),
-    props,
-    ...(children.length ? { children } : {}),
-    ...(pushes ? { pushes } : {}),
-  };
-}
+const serialize = (el: ReactElement<Record<string, unknown>>) => serializeTree(el, runAction);
 
 function render(entry: LogEntry, tenant?: TenantConfig, timeframe?: string) {
   const tree = serialize(

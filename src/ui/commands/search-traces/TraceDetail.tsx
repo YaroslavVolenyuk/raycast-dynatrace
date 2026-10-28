@@ -4,8 +4,12 @@ import { formatDuration } from "../../../sdk/resources";
 import type { TenantConfig } from "../../../sdk/auth";
 import { buildTraceUrl } from "../../lib/deepLinks";
 import { keyValueTable, fenceCode } from "../../lib/markdown";
+import { copyTraceSpanActions, tenantBaseUrl, traceMetadataLink } from "../../components/TraceBlocks";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+type Raw = Record<string, unknown>;
+type Row = readonly [string, string | undefined];
 
 function val(v: unknown): string | undefined {
   if (v == null || v === "" || v === "N/A") return undefined;
@@ -23,86 +27,119 @@ function statusColor(code: string): Color {
   }
 }
 
+const hasHttp = (entry: SpanEntry) => !!(entry.httpMethod || entry.urlPath);
+const hasDb = (entry: SpanEntry) => !!(entry.dbSystem || entry.dbOperation);
+const hasRpc = (raw: Raw) => !!(val(raw["rpc.system"]) || val(raw["rpc.method"]));
+
+// ── Markdown ──────────────────────────────────────────────────────────────────
+
+function buildMarkdown(entry: SpanEntry, raw: Raw, durationStr: string): string {
+  const rawVal = (key: string) => val(raw[key]);
+  const server: Row[] = [
+    ["server.address", rawVal("server.address")],
+    ["server.port", rawVal("server.port")],
+  ];
+
+  // Summary header omitted — status/duration/start-time are shown in the right metadata pane.
+  const groups: Array<{ heading: string; show: boolean; rows: Row[] }> = [
+    {
+      heading: "Span",
+      show: true,
+      rows: [
+        ["trace.id", entry.traceId],
+        ["span.id", entry.spanId],
+        ["span.parent_id", entry.parentSpanId],
+        ["span.kind", entry.kind],
+        ["service.name", entry.service],
+        ["endpoint.name", rawVal("endpoint.name")],
+        ["duration", durationStr],
+        ["status.message", entry.statusMessage],
+      ],
+    },
+    {
+      heading: "HTTP",
+      show: hasHttp(entry),
+      rows: [
+        ["http.request.method", entry.httpMethod],
+        ["url.path", entry.urlPath],
+        ["http.route", entry.httpRoute],
+        ["http.response.status_code", entry.httpStatusCode?.toString()],
+        ...server,
+      ],
+    },
+    {
+      heading: "Database",
+      show: hasDb(entry),
+      rows: [
+        ["db.system", entry.dbSystem],
+        ["db.operation.name", entry.dbOperation],
+        ["db.namespace", entry.dbNamespace],
+        ["db.collection.name", rawVal("db.collection.name")],
+        ...server,
+      ],
+    },
+    {
+      heading: "RPC",
+      show: hasRpc(raw),
+      rows: [
+        ["rpc.system", rawVal("rpc.system")],
+        ["rpc.service", rawVal("rpc.service")],
+        ["rpc.method", rawVal("rpc.method")],
+      ],
+    },
+  ];
+
+  const sections = groups.flatMap(({ heading, show, rows }) => {
+    const table = show ? keyValueTable(rows) : "";
+    return table ? [`### ${heading}`, table] : [];
+  });
+  sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
+
+  return sections.join("\n\n");
+}
+
+// ── Metadata ──────────────────────────────────────────────────────────────────
+
+function httpMetadata(entry: SpanEntry) {
+  if (!hasHttp(entry)) return null;
+  return (
+    <>
+      <Detail.Metadata.Separator />
+      {entry.httpMethod && entry.urlPath && (
+        <Detail.Metadata.Label title="Request" text={`${entry.httpMethod} ${entry.urlPath}`} />
+      )}
+      {entry.httpStatusCode != null && (
+        <Detail.Metadata.Label title="HTTP Status" text={String(entry.httpStatusCode)} />
+      )}
+    </>
+  );
+}
+
+function dbMetadata(entry: SpanEntry) {
+  if (!hasDb(entry)) return null;
+  return (
+    <>
+      <Detail.Metadata.Separator />
+      {entry.dbSystem && <Detail.Metadata.Label title="DB System" text={entry.dbSystem} />}
+      {entry.dbOperation && entry.dbNamespace && (
+        <Detail.Metadata.Label title="Operation" text={`${entry.dbOperation} ${entry.dbNamespace}`} />
+      )}
+    </>
+  );
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenant?: TenantConfig }) {
-  const raw = entry.raw as Record<string, unknown>;
-  const baseUrl = tenant?.tenantEndpoint?.replace(/\/$/, "") ?? "";
+  const raw = entry.raw as Raw;
+  const baseUrl = tenantBaseUrl(tenant);
   const traceUrl = baseUrl ? buildTraceUrl(baseUrl, entry.traceId) : undefined;
-
-  const hasHttp = !!(entry.httpMethod || entry.urlPath);
-  const hasDb = !!(entry.dbSystem || entry.dbOperation);
-  const hasRpc = !!(val(raw["rpc.system"]) || val(raw["rpc.method"]));
-
-  // ── Markdown sections ──────────────────────────────────────────────────────
-
-  const sections: string[] = [];
-
-  // Summary header omitted — status/duration/start-time are shown in the right metadata pane.
   const durationStr = entry.durationUs != null ? formatDuration(entry.durationUs) : "—";
-
-  // Core fields table
-  const coreRows: Array<[string, string | undefined]> = [
-    ["trace.id", entry.traceId],
-    ["span.id", entry.spanId],
-    ["span.parent_id", entry.parentSpanId],
-    ["span.kind", entry.kind],
-    ["service.name", entry.service],
-    ["endpoint.name", val(raw["endpoint.name"])],
-    ["duration", durationStr],
-    ["status.message", entry.statusMessage],
-  ];
-  const coreTable = keyValueTable(coreRows);
-  if (coreTable) sections.push("### Span", coreTable);
-
-  // HTTP
-  if (hasHttp) {
-    const httpRows: Array<[string, string | undefined]> = [
-      ["http.request.method", entry.httpMethod],
-      ["url.path", entry.urlPath],
-      ["http.route", entry.httpRoute],
-      ["http.response.status_code", entry.httpStatusCode?.toString()],
-      ["server.address", val(raw["server.address"])],
-      ["server.port", val(raw["server.port"])],
-    ];
-    const httpTable = keyValueTable(httpRows);
-    if (httpTable) sections.push("### HTTP", httpTable);
-  }
-
-  // DB
-  if (hasDb) {
-    const dbRows: Array<[string, string | undefined]> = [
-      ["db.system", entry.dbSystem],
-      ["db.operation.name", entry.dbOperation],
-      ["db.namespace", entry.dbNamespace],
-      ["db.collection.name", val(raw["db.collection.name"])],
-      ["server.address", val(raw["server.address"])],
-      ["server.port", val(raw["server.port"])],
-    ];
-    const dbTable = keyValueTable(dbRows);
-    if (dbTable) sections.push("### Database", dbTable);
-  }
-
-  // RPC
-  if (hasRpc) {
-    const rpcRows: Array<[string, string | undefined]> = [
-      ["rpc.system", val(raw["rpc.system"])],
-      ["rpc.service", val(raw["rpc.service"])],
-      ["rpc.method", val(raw["rpc.method"])],
-    ];
-    const rpcTable = keyValueTable(rpcRows);
-    if (rpcTable) sections.push("### RPC", rpcTable);
-  }
-
-  // Raw JSON
-  sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
-
-  const markdown = sections.join("\n\n");
 
   return (
     <Detail
       navigationTitle={`${entry.service ?? "Span"} — ${entry.name}`}
-      markdown={markdown}
+      markdown={buildMarkdown(entry, raw, durationStr)}
       actions={
         <ActionPanel>
           {traceUrl && (
@@ -112,16 +149,7 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
               shortcut={{ modifiers: ["cmd", "shift"], key: "o" }}
             />
           )}
-          <Action.CopyToClipboard
-            title="Copy Trace ID"
-            content={entry.traceId}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
-          />
-          <Action.CopyToClipboard
-            title="Copy Span ID"
-            content={entry.spanId}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
-          />
+          {copyTraceSpanActions(entry.traceId, entry.spanId)}
           {traceUrl && <Action.CopyToClipboard title="Copy Trace Link" content={traceUrl} />}
         </ActionPanel>
       }
@@ -142,34 +170,9 @@ export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenan
           )}
           {entry.isRootSpan && <Detail.Metadata.Label title="Root Span" text="Yes" />}
 
-          {hasHttp && (
-            <>
-              <Detail.Metadata.Separator />
-              {entry.httpMethod && entry.urlPath && (
-                <Detail.Metadata.Label title="Request" text={`${entry.httpMethod} ${entry.urlPath}`} />
-              )}
-              {entry.httpStatusCode != null && (
-                <Detail.Metadata.Label title="HTTP Status" text={String(entry.httpStatusCode)} />
-              )}
-            </>
-          )}
-
-          {hasDb && (
-            <>
-              <Detail.Metadata.Separator />
-              {entry.dbSystem && <Detail.Metadata.Label title="DB System" text={entry.dbSystem} />}
-              {entry.dbOperation && entry.dbNamespace && (
-                <Detail.Metadata.Label title="Operation" text={`${entry.dbOperation} ${entry.dbNamespace}`} />
-              )}
-            </>
-          )}
-
-          {traceUrl && (
-            <>
-              <Detail.Metadata.Separator />
-              <Detail.Metadata.Link title="Distributed Trace" target={traceUrl} text="Open in Explorer" />
-            </>
-          )}
+          {httpMetadata(entry)}
+          {dbMetadata(entry)}
+          {traceMetadataLink(traceUrl)}
         </Detail.Metadata>
       }
     />

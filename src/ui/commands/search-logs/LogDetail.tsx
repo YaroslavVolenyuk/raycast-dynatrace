@@ -6,6 +6,7 @@ import { formatLogContent } from "../../lib/formatLogContent";
 import { buildTraceUrl } from "../../lib/deepLinks";
 import { keyValueTable, fenceCode } from "../../lib/markdown";
 import type { TimeframeValue } from "../../lib/listArgs";
+import { tenantBaseUrl, traceMetadataLink } from "../../components/TraceBlocks";
 import SearchTraces from "../search-traces/SearchTraces";
 import RunDql from "../run-dql/RunDql";
 
@@ -167,7 +168,7 @@ function buildMarkdown(entry: LogEntry, raw: Raw, dqlFilter: string): string {
 }
 
 function traceLink(tenant: TenantConfig | undefined, traceId: string | undefined): string | undefined {
-  const baseUrl = tenant?.tenantEndpoint?.replace(/\/$/, "") ?? "";
+  const baseUrl = tenantBaseUrl(tenant);
   return traceId && baseUrl ? buildTraceUrl(baseUrl, traceId) : undefined;
 }
 
@@ -271,12 +272,7 @@ export default function LogDetail({
           )}
 
           {/* ── Telemetry link ────────────────────────────────────────────── */}
-          {traceUrl && (
-            <>
-              <Detail.Metadata.Separator />
-              <Detail.Metadata.Link title="Distributed Trace" target={traceUrl} text="Open in Explorer" />
-            </>
-          )}
+          {traceMetadataLink(traceUrl)}
         </Detail.Metadata>
       }
     />

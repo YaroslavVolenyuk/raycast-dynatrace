@@ -17,6 +17,7 @@ import { listSectionSubtitle, listSectionTitle } from "../../lib/sectionTitle";
 import TenantActions from "../../components/TenantActions";
 import { tenantQueryFallback } from "../../components/TenantQueryFallback";
 import TimeframeSubmenu from "../../components/TimeframeSubmenu";
+import { copyTraceSpanActions } from "../../components/TraceBlocks";
 import TraceDetail from "./TraceDetail";
 
 interface CommandArguments {
@@ -68,16 +69,7 @@ function SpanItem(props: { entry: SpanEntry; onOpen: () => void; listActions: Ac
       actions={
         <ActionPanel>
           <Action title="Open Details" icon={Icon.ArrowRight} onAction={props.onOpen} />
-          <Action.CopyToClipboard
-            title="Copy Trace ID"
-            content={entry.traceId}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
-          />
-          <Action.CopyToClipboard
-            title="Copy Span ID"
-            content={entry.spanId}
-            shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
-          />
+          {copyTraceSpanActions(entry.traceId, entry.spanId)}
           {props.listActions}
         </ActionPanel>
       }
