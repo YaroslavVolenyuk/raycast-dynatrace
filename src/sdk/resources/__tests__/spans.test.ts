@@ -113,6 +113,16 @@ describe("normalizeSpan", () => {
     expect(entry.name).toBe("INSERT mydb");
   });
 
+  it("falls back to the bare db operation when there is no namespace", () => {
+    const entry = normalizeSpan({
+      "trace.id": "abc",
+      "span.id": "def",
+      start_time: "t",
+      "db.operation.name": "SELECT",
+    });
+    expect(entry.name).toBe("SELECT");
+  });
+
   it("falls back to spanId as last resort for name", () => {
     const entry = normalizeSpan({ "trace.id": "abc", "span.id": "xyz", start_time: "t" });
     expect(entry.name).toBe("xyz");

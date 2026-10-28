@@ -78,3 +78,18 @@ it("does not call the environment when the credentials are wrong", async () => {
   expect(await testTenantConnection(TENANT)).toEqual({ valid: false, error: "invalid_client" });
   expect(mockFetch).not.toHaveBeenCalled();
 });
+
+it("reports a timeout when the request is aborted", async () => {
+  mockFetch.mockRejectedValueOnce(Object.assign(new Error("aborted"), { name: "AbortError" }));
+  expect(await testTenantConnection(TENANT)).toEqual({
+    valid: false,
+    error: "Environment is not responding (15s timeout) — check the Environment URL",
+  });
+});
+
+it("passes through other error messages, stringifying non-errors", async () => {
+  mockFetch.mockRejectedValueOnce(new Error("boom"));
+  expect(await testTenantConnection(TENANT)).toEqual({ valid: false, error: "boom" });
+  mockFetch.mockRejectedValueOnce("plain");
+  expect(await testTenantConnection(TENANT)).toEqual({ valid: false, error: "plain" });
+});

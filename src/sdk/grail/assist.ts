@@ -176,6 +176,20 @@ export async function verifyDql(
 
 const TRAILING_PARTS = new Set(["SPACE", "PARENTHESIS_OPEN"]);
 
+type RawSuggestion = z.infer<typeof autocompleteResponseSchema>["suggestions"][number];
+
+function toDqlSuggestion(s: RawSuggestion, main: RawSuggestion["parts"][number] | undefined): DqlSuggestion {
+  return {
+    text: s.suggestion,
+    replaceChars: s.alreadyTypedCharacters,
+    kind: main?.type ?? "UNKNOWN",
+    label: main?.suggestion || s.suggestion.trim(),
+    info: main?.info,
+    synopsis: main?.synopsis,
+    dataType: main?.dataType,
+  };
+}
+
 export function normalizeCompletion(raw: unknown): DqlCompletion {
   const parsed = autocompleteResponseSchema.parse(raw);
   let context: DqlCompletion["context"];
@@ -188,15 +202,7 @@ export function normalizeCompletion(raw: unknown): DqlCompletion {
     // Placeholders ("" for a parameter key or "some custom field") cannot be inserted.
     if (!s.suggestion.trim() || seen.has(s.suggestion)) continue;
     seen.add(s.suggestion);
-    suggestions.push({
-      text: s.suggestion,
-      replaceChars: s.alreadyTypedCharacters,
-      kind: main?.type ?? "UNKNOWN",
-      label: main?.suggestion || s.suggestion.trim(),
-      info: main?.info,
-      synopsis: main?.synopsis,
-      dataType: main?.dataType,
-    });
+    suggestions.push(toDqlSuggestion(s, main));
   }
   return { context, suggestions };
 }

@@ -59,20 +59,24 @@ export function ssoEndpointFor(tenantEndpoint: string): string {
   return PROD_SSO_ENDPOINT;
 }
 
+/** The string-valued reason fields of a parsed OAuth error body, in display order. */
+function oauthErrorParts(json: { error?: unknown; error_description?: unknown; message?: unknown }): unknown[] {
+  const err = json.error;
+  const nested = err && typeof err === "object" ? (err as { message?: unknown; code?: unknown }) : undefined;
+  return [
+    typeof err === "string" ? err : undefined,
+    typeof nested?.message === "string" ? nested.message : undefined,
+    typeof json.error_description === "string" ? json.error_description : undefined,
+    typeof json.message === "string" ? json.message : undefined,
+  ].filter(Boolean);
+}
+
 /** Extracts a human-readable reason from an OAuth error body (JSON or form). */
 function describeOAuthBody(body: string): string | null {
   try {
     // OAuth servers answer { error: "invalid_client", error_description }; a wrong
     // "SSO endpoint" pointing at a Dynatrace API answers { error: { code, message } }.
-    const json = JSON.parse(body) as { error?: unknown; error_description?: unknown; message?: unknown };
-    const err = json.error;
-    const nested = err && typeof err === "object" ? (err as { message?: unknown; code?: unknown }) : undefined;
-    const parts = [
-      typeof err === "string" ? err : undefined,
-      typeof nested?.message === "string" ? nested.message : undefined,
-      typeof json.error_description === "string" ? json.error_description : undefined,
-      typeof json.message === "string" ? json.message : undefined,
-    ].filter(Boolean);
+    const parts = oauthErrorParts(JSON.parse(body) as Parameters<typeof oauthErrorParts>[0]);
     if (parts.length) return parts.join(": ");
   } catch {
     // not JSON — fall through
@@ -125,6 +129,36 @@ export function credentialsFingerprint(tenant: TenantConfig): string {
     .digest("hex");
 }
 
+/** POSTs the client-credentials grant to the tenant's SSO endpoint (15s timeout). */
+async function requestToken(tenant: TenantConfig): Promise<Response> {
+  const scopeString = tenant.scopes.join(" ");
+  const params = new URLSearchParams({
+    grant_type: "client_credentials",
+    client_id: tenant.clientId,
+    client_secret: tenant.clientSecret,
+    scope: scopeString,
+  });
+
+  const ssoTimeout = new AbortController();
+  const ssoTimer = setTimeout(() => ssoTimeout.abort(), 15_000);
+  try {
+    return await fetch(tenant.ssoEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+      signal: ssoTimeout.signal,
+    });
+  } catch (fetchErr) {
+    clearTimeout(ssoTimer);
+    if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+      throw new OAuthError(0, "SSO endpoint is not responding (15s timeout)");
+    }
+    throw fetchErr;
+  } finally {
+    clearTimeout(ssoTimer);
+  }
+}
+
 // ── Main function ─────────────────────────────────────────────────────────────
 
 /**
@@ -141,34 +175,7 @@ export async function getAccessToken(tenant: TenantConfig): Promise<string> {
     return cached.access_token;
   }
 
-  // Fetch a new token
-  const scopeString = tenant.scopes.join(" ");
-  const params = new URLSearchParams({
-    grant_type: "client_credentials",
-    client_id: tenant.clientId,
-    client_secret: tenant.clientSecret,
-    scope: scopeString,
-  });
-
-  const ssoTimeout = new AbortController();
-  const ssoTimer = setTimeout(() => ssoTimeout.abort(), 15_000);
-  let res: Response;
-  try {
-    res = await fetch(tenant.ssoEndpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-      signal: ssoTimeout.signal,
-    });
-  } catch (fetchErr) {
-    clearTimeout(ssoTimer);
-    if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
-      throw new OAuthError(0, "SSO endpoint is not responding (15s timeout)");
-    }
-    throw fetchErr;
-  } finally {
-    clearTimeout(ssoTimer);
-  }
+  const res = await requestToken(tenant);
 
   const body = await res.text();
 

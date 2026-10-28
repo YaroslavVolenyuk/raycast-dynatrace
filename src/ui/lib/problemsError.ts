@@ -12,6 +12,45 @@ export interface ProblemsErrorInfo {
   detail: string;
 }
 
+interface ProblemsErrorRule {
+  pattern: RegExp;
+  kind: ProblemsErrorKind;
+  summary: string;
+}
+
+// Checked in order; the first match wins.
+const AFTER_SCOPE_RULES: ProblemsErrorRule[] = [
+  {
+    pattern: /oauth error|authentication failed|client_id|client_secret/i,
+    kind: "config",
+    summary: "Authentication failed — check credentials",
+  },
+  {
+    pattern: /extra dql filter/i,
+    kind: "config",
+    summary: "Invalid Extra DQL Filter — check extension preferences",
+  },
+  // Name of the environment host does not resolve while the SSO answered: the URL is wrong.
+  {
+    pattern: /environment url not found/i,
+    kind: "config",
+    summary: "Environment URL not found — check the tenant",
+  },
+  { pattern: /endpoint url|html page/i, kind: "config", summary: "Tenant endpoint looks wrong" },
+  // Grail rejects a malformed query with a 4xx code (401/403 were handled above).
+  {
+    pattern: /\(code 4\d\d\)/,
+    kind: "config",
+    summary: "Query rejected — check Extra DQL Filter in preferences",
+  },
+  {
+    pattern: /unexpected problem record format/i,
+    kind: "transient",
+    summary: "Unexpected data from Dynatrace — copy error details",
+  },
+  { pattern: /timeout|not responding|did not finish/i, kind: "transient", summary: "Dynatrace is not responding" },
+];
+
 export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
   const detail = err instanceof Error ? err.message : String(err);
 
@@ -23,28 +62,7 @@ export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
       detail,
     };
   }
-  if (/oauth error|authentication failed|client_id|client_secret/i.test(detail)) {
-    return { kind: "config", summary: "Authentication failed — check credentials", detail };
-  }
-  if (/extra dql filter/i.test(detail)) {
-    return { kind: "config", summary: "Invalid Extra DQL Filter — check extension preferences", detail };
-  }
-  // Name of the environment host does not resolve while the SSO answered: the URL is wrong.
-  if (/environment url not found/i.test(detail)) {
-    return { kind: "config", summary: "Environment URL not found — check the tenant", detail };
-  }
-  if (/endpoint url|html page/i.test(detail)) {
-    return { kind: "config", summary: "Tenant endpoint looks wrong", detail };
-  }
-  // Grail rejects a malformed query with a 4xx code (401/403 were handled above).
-  if (/\(code 4\d\d\)/.test(detail)) {
-    return { kind: "config", summary: "Query rejected — check Extra DQL Filter in preferences", detail };
-  }
-  if (/unexpected problem record format/i.test(detail)) {
-    return { kind: "transient", summary: "Unexpected data from Dynatrace — copy error details", detail };
-  }
-  if (/timeout|not responding|did not finish/i.test(detail)) {
-    return { kind: "transient", summary: "Dynatrace is not responding", detail };
-  }
+  const rule = AFTER_SCOPE_RULES.find((r) => r.pattern.test(detail));
+  if (rule) return { kind: rule.kind, summary: rule.summary, detail };
   return { kind: "transient", summary: "Could not reach Dynatrace", detail };
 }

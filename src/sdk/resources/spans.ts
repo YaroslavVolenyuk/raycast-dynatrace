@@ -128,22 +128,25 @@ export interface SpanEntry {
   raw: SpanRecord;
 }
 
-export function normalizeSpan(record: SpanRecord): SpanEntry {
-  const httpLabel =
-    record["http.request.method"] && record["url.path"]
-      ? `${record["http.request.method"]} ${record["url.path"]}`
-      : undefined;
-  const dbLabel =
-    record["db.operation.name"] && record["db.namespace"]
-      ? `${record["db.operation.name"]} ${record["db.namespace"]}`
-      : record["db.operation.name"];
+function httpSpanLabel(record: SpanRecord): string | undefined {
+  return record["http.request.method"] && record["url.path"]
+    ? `${record["http.request.method"]} ${record["url.path"]}`
+    : undefined;
+}
 
+function dbSpanLabel(record: SpanRecord): string | undefined {
+  return record["db.operation.name"] && record["db.namespace"]
+    ? `${record["db.operation.name"]} ${record["db.namespace"]}`
+    : record["db.operation.name"];
+}
+
+export function normalizeSpan(record: SpanRecord): SpanEntry {
   return {
     traceId: record["trace.id"],
     spanId: record["span.id"],
     parentSpanId: record["span.parent_id"],
     kind: record["span.kind"]?.toLowerCase() ?? "internal",
-    name: record["span.name"] ?? httpLabel ?? dbLabel ?? record["span.id"],
+    name: record["span.name"] ?? httpSpanLabel(record) ?? dbSpanLabel(record) ?? record["span.id"],
     statusCode: (record["span.status_code"] ?? "UNSET").toUpperCase(),
     statusMessage: record["span.status_message"],
     startTime: record.start_time,

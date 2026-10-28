@@ -12,6 +12,20 @@ export type ConnectionTestResult =
 
 const VERIFY_TIMEOUT_MS = 15_000;
 
+function connectionFailure(err: unknown, endpoint: string): ConnectionTestResult {
+  if (err instanceof Error && err.name === "AbortError") {
+    return { valid: false, error: "Environment is not responding (15s timeout) — check the Environment URL" };
+  }
+  if (isNetworkError(err)) return { valid: false, error: environmentNetworkError(err, endpoint).message };
+  return { valid: false, error: err instanceof Error ? err.message : String(err) };
+}
+
+function rejectedTokenMessage(tenant: TenantConfig): string {
+  return tenant.platformToken
+    ? "The environment rejected the platform token — it is expired or revoked, or was created in another environment"
+    : "The environment rejected the token — the OAuth client belongs to another account, or the SSO endpoint does not match this environment";
+}
+
 export async function testTenantConnection(tenant: TenantConfig): Promise<ConnectionTestResult> {
   const credentials = await validateTenantCredentials(tenant);
   if (!credentials.valid) return credentials;
@@ -31,22 +45,13 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
     });
     body = await response.text();
   } catch (err) {
-    if (err instanceof Error && err.name === "AbortError") {
-      return { valid: false, error: "Environment is not responding (15s timeout) — check the Environment URL" };
-    }
-    if (isNetworkError(err)) return { valid: false, error: environmentNetworkError(err, endpoint).message };
-    return { valid: false, error: err instanceof Error ? err.message : String(err) };
+    return connectionFailure(err, endpoint);
   } finally {
     clearTimeout(timer);
   }
 
   if (response.status === 401) {
-    return {
-      valid: false,
-      error: tenant.platformToken
-        ? "The environment rejected the platform token — it is expired or revoked, or was created in another environment"
-        : "The environment rejected the token — the OAuth client belongs to another account, or the SSO endpoint does not match this environment",
-    };
+    return { valid: false, error: rejectedTokenMessage(tenant) };
   }
   // 403 = reachable and token accepted, but a scope is missing. Reported as such,
   // not as success: the scopes listed in the tenant may not match the real ones.

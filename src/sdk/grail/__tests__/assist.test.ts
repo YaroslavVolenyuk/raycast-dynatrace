@@ -58,6 +58,36 @@ describe("normalizeCompletion", () => {
     expect(c.suggestions.find((s) => s.text === "abs(")).toMatchObject({ kind: "FUNCTION_NAME", label: "abs" });
   });
 
+  it("labels a suggestion from its first part when every part is trailing, and without parts", () => {
+    const c = normalizeCompletion({
+      suggestions: [
+        { suggestion: "a ", alreadyTypedCharacters: 0, parts: [{ type: "SPACE", suggestion: "" }] },
+        { suggestion: "b ", alreadyTypedCharacters: 1, parts: [] },
+      ],
+    });
+    expect(c.context).toBeUndefined();
+    expect(c.suggestions).toEqual([
+      {
+        text: "a ",
+        replaceChars: 0,
+        kind: "SPACE",
+        label: "a",
+        info: undefined,
+        synopsis: undefined,
+        dataType: undefined,
+      },
+      {
+        text: "b ",
+        replaceChars: 1,
+        kind: "UNKNOWN",
+        label: "b",
+        info: undefined,
+        synopsis: undefined,
+        dataType: undefined,
+      },
+    ]);
+  });
+
   it("suggests start commands for an empty query", () => {
     expect(normalizeCompletion(fixture.autocompleteEmpty).suggestions.map((s) => s.label)).toContain("fetch");
   });
