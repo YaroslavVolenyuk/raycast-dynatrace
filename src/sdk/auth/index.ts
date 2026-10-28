@@ -211,6 +211,38 @@ export function invalidateTokenCache(tenantId: string): void {
   }
 }
 
+// First match wins: invalid_scope outranks invalid_client outranks invalid_request.
+const CREDENTIAL_HINTS: ReadonlyArray<readonly [code: string, hint: string]> = [
+  ["invalid_scope", " — one or more scopes are not granted to this OAuth client; remove the unsupported scopes"],
+  ["invalid_client", " — check the Client ID and Secret"],
+  ["invalid_request", " — malformed token request; check Client ID, Secret, and SSO endpoint"],
+];
+
+/** Any status other than 400/401/403: 404 or an HTML page means the URL is not a token endpoint. */
+function describeEndpointFailure(err: OAuthError, detail: string | null): string {
+  const ssoHint =
+    err.statusCode === 404 || err.body.trimStart().startsWith("<")
+      ? " — this is not an SSO token endpoint; leave SSO Token Endpoint blank to use the one that belongs to the Environment URL"
+      : "";
+  const reason = detail ? `OAuth ${err.statusCode}: ${detail}` : `OAuth error ${err.statusCode}`;
+  return `${reason}${ssoHint}`;
+}
+
+/** The user-facing message for a failed token request. */
+function describeOAuthFailure(err: OAuthError): string {
+  const detail = describeOAuthBody(err.body);
+  // Surface the SSO's own reason — distinguishes invalid_client (bad
+  // ID/Secret) from invalid_scope (a scope the OAuth client isn't granted).
+  if (err.statusCode === 400 || err.statusCode === 401) {
+    const hint = CREDENTIAL_HINTS.find(([code]) => detail?.includes(code))?.[1] ?? "";
+    return `${detail ?? "Invalid client credentials"}${hint}`;
+  }
+  if (err.statusCode === 403) {
+    return detail ? `Forbidden: ${detail}` : "Forbidden — check scopes and permissions";
+  }
+  return describeEndpointFailure(err, detail);
+}
+
 /**
  * Validates tenant credentials by attempting to get an access token.
  * Returns { valid: true } on success, or { valid: false, error } on failure.
@@ -226,34 +258,7 @@ export async function validateTenantCredentials(
     await getAccessToken(tenant);
     return { valid: true };
   } catch (err) {
-    if (err instanceof OAuthError) {
-      const detail = describeOAuthBody(err.body);
-      // Surface the SSO's own reason — distinguishes invalid_client (bad
-      // ID/Secret) from invalid_scope (a scope the OAuth client isn't granted).
-      if (err.statusCode === 400 || err.statusCode === 401) {
-        const hint =
-          detail?.includes("invalid_scope") === true
-            ? " — one or more scopes are not granted to this OAuth client; remove the unsupported scopes"
-            : detail?.includes("invalid_client") === true
-              ? " — check the Client ID and Secret"
-              : detail?.includes("invalid_request") === true
-                ? " — malformed token request; check Client ID, Secret, and SSO endpoint"
-                : "";
-        return { valid: false, error: `${detail ?? "Invalid client credentials"}${hint}` };
-      }
-      if (err.statusCode === 403) {
-        return { valid: false, error: detail ? `Forbidden: ${detail}` : "Forbidden — check scopes and permissions" };
-      }
-      // 404 / an HTML page: the "SSO endpoint" is not a token endpoint at all.
-      const ssoHint =
-        err.statusCode === 404 || err.body.trimStart().startsWith("<")
-          ? " — this is not an SSO token endpoint; leave SSO Token Endpoint blank to use the one that belongs to the Environment URL"
-          : "";
-      return {
-        valid: false,
-        error: `${detail ? `OAuth ${err.statusCode}: ${detail}` : `OAuth error ${err.statusCode}`}${ssoHint}`,
-      };
-    }
+    if (err instanceof OAuthError) return { valid: false, error: describeOAuthFailure(err) };
     if (err instanceof TypeError && err.message.includes("fetch")) {
       return { valid: false, error: "Cannot reach SSO endpoint — check URL and network" };
     }

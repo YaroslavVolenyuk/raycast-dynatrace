@@ -163,6 +163,34 @@ test("validateTenantCredentials never shows [object Object] for a nested error b
   expect(result.valid === false && result.error).toMatch(/not an SSO token endpoint/);
 });
 
+test.each([
+  [400, "", "Invalid client credentials"],
+  [
+    400,
+    '{"error":"invalid_scope","error_description":"invalid_client"}',
+    "invalid_scope: invalid_client — one or more scopes are not granted to this OAuth client; remove the unsupported scopes",
+  ],
+  [
+    400,
+    '{"error":"invalid_request"}',
+    "invalid_request — malformed token request; check Client ID, Secret, and SSO endpoint",
+  ],
+  [401, "plain text", "plain text"],
+  [403, "", "Forbidden — check scopes and permissions"],
+  [403, '{"error":"access_denied"}', "Forbidden: access_denied"],
+  [500, "", "OAuth error 500"],
+  [500, "boom", "OAuth 500: boom"],
+  [
+    502,
+    "<html>bad</html>",
+    "OAuth 502: <html>bad</html> — this is not an SSO token endpoint; leave SSO Token Endpoint blank to use the one that belongs to the Environment URL",
+  ],
+])("validateTenantCredentials message for %i with body %j", async (status, body, expected) => {
+  mockErrorResponse(status, body);
+  const { validateTenantCredentials } = await loadAuth();
+  expect(await validateTenantCredentials(TENANT)).toEqual({ valid: false, error: expected });
+});
+
 describe("platform token", () => {
   const TOKEN_TENANT: TenantConfig = { ...TENANT, platformToken: "dt0s16.ABC.SECRET", scopes: [] };
 
