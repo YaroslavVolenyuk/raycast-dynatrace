@@ -20,7 +20,8 @@ export function describeIssues(issues: readonly DqlIssue[]): string | undefined 
   if (errors.length === 0) return undefined;
   const [first] = errors;
   const where = first.line != null ? `Line ${first.line}, col ${first.column}: ` : "";
-  return `${where}${first.message}${errors.length > 1 ? ` (+${errors.length - 1} more)` : ""}`;
+  const more = errors.length > 1 ? ` (+${errors.length - 1} more)` : "";
+  return `${where}${first.message}${more}`;
 }
 
 export function useDqlVerification(tenant: TenantConfig | null | undefined, query: string): DqlVerificationState {

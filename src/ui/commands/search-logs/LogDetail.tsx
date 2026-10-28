@@ -68,11 +68,8 @@ function buildLogContextQuery(raw: Record<string, unknown>, limit = 100): string
   if (appName) {
     return `fetch logs\n| filter dt.app.name == "${escapeDqlString(appName)}"\n| limit ${limit}`;
   }
-  const processName = raw["dt.process.name"]
-    ? String(raw["dt.process.name"])
-    : raw["dt.process_group.detected_name"]
-      ? String(raw["dt.process_group.detected_name"])
-      : undefined;
+  const processNameRaw = raw["dt.process.name"] || raw["dt.process_group.detected_name"];
+  const processName = processNameRaw ? String(processNameRaw) : undefined;
   if (processName) {
     return `fetch logs\n| filter dt.process.name == "${escapeDqlString(processName)}"\n| limit ${limit}`;
   }

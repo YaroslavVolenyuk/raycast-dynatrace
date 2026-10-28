@@ -201,16 +201,18 @@ export interface ListSpansOptions {
   signal?: AbortSignal;
 }
 
+function spansFetchClause(timeframeDql: string | undefined, timeframe: ListSpansOptions["timeframe"]): string {
+  if (timeframeDql) return `fetch spans, from: now()-${timeframeDql}`;
+  if (timeframe) return `fetch spans, from: "${timeframe.start}", to: "${timeframe.end}"`;
+  return "fetch spans";
+}
+
 export function buildSpansQuery(opts: ListSpansOptions = {}): string {
   const { status = "all", limit = SPAN_PAGE_SIZE, timeframeDql, timeframe } = opts;
   // Grail renders trace IDs as lowercase hex; a pasted ID may carry spaces or capitals.
   const traceId = opts.traceId?.trim().toLowerCase();
 
-  const fetchClause = timeframeDql
-    ? `fetch spans, from: now()-${timeframeDql}`
-    : timeframe
-      ? `fetch spans, from: "${timeframe.start}", to: "${timeframe.end}"`
-      : "fetch spans";
+  const fetchClause = spansFetchClause(timeframeDql, timeframe);
 
   const parts: string[] = [fetchClause];
 

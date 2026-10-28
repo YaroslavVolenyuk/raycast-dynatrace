@@ -130,6 +130,12 @@ export interface ListLogsOptions {
   signal?: AbortSignal;
 }
 
+function logsFetchClause(timeframeDql: string | undefined, timeframe: ListLogsOptions["timeframe"]): string {
+  if (timeframeDql) return `fetch logs, from: now()-${timeframeDql}`;
+  if (timeframe) return `fetch logs, from: "${timeframe.start}", to: "${timeframe.end}"`;
+  return "fetch logs";
+}
+
 /** Builds the `fetch logs` DQL string for the given filters. */
 export function buildLogsQuery(opts: ListLogsOptions = {}): string {
   const { level = "all", limit = LOG_PAGE_SIZE, timeframeDql, timeframe } = opts;
@@ -137,11 +143,7 @@ export function buildLogsQuery(opts: ListLogsOptions = {}): string {
 
   // Prefer relative DQL syntax (now()-Xh) so Grail always respects the window.
   // Fall back to absolute ISO range, then plain fetch logs.
-  const fetchClause = timeframeDql
-    ? `fetch logs, from: now()-${timeframeDql}`
-    : timeframe
-      ? `fetch logs, from: "${timeframe.start}", to: "${timeframe.end}"`
-      : "fetch logs";
+  const fetchClause = logsFetchClause(timeframeDql, timeframe);
 
   const parts: string[] = [fetchClause];
 

@@ -82,6 +82,11 @@ export function recordMatches(record: Record<string, unknown>, search: string): 
 // Sheets; log content is attacker-controlled (e.g. `=HYPERLINK(...)`).
 const FORMULA_START = /^[=+\-@\t\r]/;
 
+function csvText(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  return typeof v === "object" ? JSON.stringify(v) : String(v);
+}
+
 /**
  * RFC 4180 CSV of the records, one column per DQL field. Text that a
  * spreadsheet would evaluate as a formula is prefixed with `'` (OWASP); plain
@@ -89,7 +94,7 @@ const FORMULA_START = /^[=+\-@\t\r]/;
  */
 export function toCsv(records: readonly Record<string, unknown>[], columns: readonly string[]): string {
   const cell = (v: unknown) => {
-    let text = v === null || v === undefined ? "" : typeof v === "object" ? JSON.stringify(v) : String(v);
+    let text = csvText(v);
     if (typeof v !== "number" && typeof v !== "bigint" && FORMULA_START.test(text)) text = `'${text}`;
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };

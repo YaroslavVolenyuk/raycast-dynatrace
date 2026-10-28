@@ -89,9 +89,11 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
   const period = timeframeLabel(timeframeKey);
   const navigationTitle = `${tenant.name} · ${period}`;
   // Same cap as the Dynatrace UI: 1,000 records unless the query limits itself.
-  const sectionTitle = data
-    ? `${result.records.length} record${result.records.length === 1 ? "" : "s"}${result.truncated ? ` — truncated (max ${DQL_DEFAULT_LIMIT.toLocaleString("en-US")} records, 1 MB), narrow the query` : ""}`
-    : undefined;
+  const recordCount = `${result.records.length} record${result.records.length === 1 ? "" : "s"}`;
+  const truncatedNote = result.truncated
+    ? ` — truncated (max ${DQL_DEFAULT_LIMIT.toLocaleString("en-US")} records, 1 MB), narrow the query`
+    : "";
+  const sectionTitle = data ? `${recordCount}${truncatedNote}` : undefined;
   // Grail's own warnings (scan limit, sampling, truncation) in its own words.
   const sectionSubtitle = result.notices.length ? result.notices.join(" · ") : undefined;
 

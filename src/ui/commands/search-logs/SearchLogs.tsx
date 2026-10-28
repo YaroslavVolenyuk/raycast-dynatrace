@@ -55,11 +55,9 @@ function levelColor(level: string): Color {
 function relativeTime(timestamp: string): string {
   // Clamp: clock skew between machine and Dynatrace can put a timestamp in the future.
   const diffMin = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000));
-  return diffMin < 60
-    ? `${diffMin}m`
-    : diffMin < 1440
-      ? `${Math.floor(diffMin / 60)}h`
-      : `${Math.floor(diffMin / 1440)}d`;
+  if (diffMin < 60) return `${diffMin}m`;
+  if (diffMin < 1440) return `${Math.floor(diffMin / 60)}h`;
+  return `${Math.floor(diffMin / 1440)}d`;
 }
 
 function logSubtitle(content: string): string {

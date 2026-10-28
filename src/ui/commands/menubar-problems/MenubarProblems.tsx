@@ -115,6 +115,7 @@ export default function MenubarProblems() {
   const countLabel = problemCountLabel(data);
   const problemsAppUrl = `${endpoint}/ui/apps/dynatrace.davis.problems`;
   const notShown = count - problems.length;
+  const notShownLabel = data.hasMore ? `${notShown}+` : notShown;
 
   return (
     <MenuBarExtra
@@ -140,7 +141,7 @@ export default function MenubarProblems() {
           ))}
           {notShown > 0 && (
             <MenuBarExtra.Item
-              title={`${data.hasMore ? `${notShown}+` : notShown} more in Dynatrace`}
+              title={`${notShownLabel} more in Dynatrace`}
               icon={Icon.Ellipsis}
               onAction={() => open(problemsAppUrl)}
             />

@@ -31,13 +31,13 @@ export function environmentNetworkError(err: unknown, url: string): Error {
   if (code === "ENOTFOUND") {
     return new Error(`Environment URL not found: ${host} does not exist. Check the tenant's Environment URL.`);
   }
-  return new Error(
-    `Cannot reach environment ${host}${code ? ` (${code})` : ""}. Check the Environment URL and your network.`,
-  );
+  const codeSuffix = code ? ` (${code})` : "";
+  return new Error(`Cannot reach environment ${host}${codeSuffix}. Check the Environment URL and your network.`);
 }
 
 /** Error for a network failure while requesting a token (offline, VPN, proxy). */
 export function ssoNetworkError(err: unknown, url: string): Error {
   const code = causeCode(err);
-  return new Error(`Cannot reach the SSO endpoint ${hostOf(url)}${code ? ` (${code})` : ""}. Check your network.`);
+  const codeSuffix = code ? ` (${code})` : "";
+  return new Error(`Cannot reach the SSO endpoint ${hostOf(url)}${codeSuffix}. Check your network.`);
 }
