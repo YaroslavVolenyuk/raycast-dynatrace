@@ -68,13 +68,15 @@ export function describeScopeCheck(
   return {
     style: "success",
     title: "Connection verified",
-    message:
-      missingOptional.length > 0
-        ? tenant.platformToken
-          ? `Optional, for Problems in Menu Bar: a token with ${missingOptional.join(", ")}, listed in this tenant's scopes`
-          : `Optional, for Problems in Menu Bar: grant ${missingOptional.join(", ")} to the OAuth client, then add it to this tenant's scopes`
-        : undefined,
+    message: missingOptional.length > 0 ? optionalScopeHint(tenant, missingOptional) : undefined,
   };
+}
+
+function optionalScopeHint(tenant: Pick<TenantConfig, "platformToken">, missingOptional: string[]): string {
+  const scopes = missingOptional.join(", ");
+  return tenant.platformToken
+    ? `Optional, for Problems in Menu Bar: a token with ${scopes}, listed in this tenant's scopes`
+    : `Optional, for Problems in Menu Bar: grant ${scopes} to the OAuth client, then add it to this tenant's scopes`;
 }
 
 export type AuthType = "token" | "oauth";
@@ -107,33 +109,72 @@ export function parseScopes(input: string): string[] {
  * Field-level validation mirrored from the tenant zod schema, returned as a map
  * of field → message so the form can show errors inline. Empty map = valid.
  */
-export function validateForm(values: TenantFormValues): Partial<Record<keyof TenantFormValues, string>> {
-  const errors: Partial<Record<keyof TenantFormValues, string>> = {};
+export function validateForm(values: TenantFormValues): FormErrors {
+  const errors: FormErrors = {};
 
   if (!values.name.trim()) errors.name = "Name is required";
 
   const endpointProblem = environmentUrlProblem(normalizeEnvironmentUrl(values.tenantEndpoint));
   if (endpointProblem) errors.tenantEndpoint = endpointProblem;
 
-  if (values.authType === "token") {
-    const token = values.platformToken.trim();
-    if (!token) errors.platformToken = "Platform token is required";
-    // Classic API tokens are rejected by the platform APIs with a bare 401.
-    else if (token.startsWith("dt0c01."))
-      errors.platformToken = "This is a classic API token; use a platform token (dt0s16.…)";
-  } else {
-    if (!values.clientId.trim()) errors.clientId = "Client ID is required";
-    if (!values.clientSecret.trim()) errors.clientSecret = "Client Secret is required";
-
-    // SSO endpoint is optional — left blank it falls back to the prod default.
-    // Only validate an explicit override.
-    const sso = normalizeUrl(values.ssoEndpoint);
-    if (sso && !isHttpsUrl(sso)) errors.ssoEndpoint = "Must be a valid https:// URL";
-  }
+  Object.assign(errors, values.authType === "token" ? validateTokenFields(values) : validateOAuthFields(values));
 
   if (parseScopes(values.scopes).length === 0) errors.scopes = "At least one scope is required";
 
   return errors;
+}
+
+type FormErrors = Partial<Record<keyof TenantFormValues, string>>;
+
+function validateTokenFields(values: TenantFormValues): FormErrors {
+  const token = values.platformToken.trim();
+  if (!token) return { platformToken: "Platform token is required" };
+  // Classic API tokens are rejected by the platform APIs with a bare 401.
+  if (token.startsWith("dt0c01.")) {
+    return { platformToken: "This is a classic API token; use a platform token (dt0s16.…)" };
+  }
+  return {};
+}
+
+function validateOAuthFields(values: TenantFormValues): FormErrors {
+  const errors: FormErrors = {};
+  if (!values.clientId.trim()) errors.clientId = "Client ID is required";
+  if (!values.clientSecret.trim()) errors.clientSecret = "Client Secret is required";
+
+  // SSO endpoint is optional — left blank it falls back to the prod default.
+  // Only validate an explicit override.
+  const sso = normalizeUrl(values.ssoEndpoint);
+  if (sso && !isHttpsUrl(sso)) errors.ssoEndpoint = "Must be a valid https:// URL";
+  return errors;
+}
+
+/**
+ * Initial values for the form: the tenant being edited, or blank values with the
+ * read-only scopes pre-filled for a new one.
+ */
+export function initialFormValues(tenant?: TenantConfig): TenantFormValues {
+  const blank: TenantFormValues = {
+    // New tenants start with the platform token: no admin needed to create one.
+    authType: "token",
+    name: "",
+    tenantEndpoint: "",
+    platformToken: "",
+    clientId: "",
+    clientSecret: "",
+    ssoEndpoint: "",
+    scopes: REQUIRED_SCOPES.join("\n"),
+  };
+  if (!tenant) return blank;
+  return {
+    authType: tenant.platformToken ? "token" : "oauth",
+    name: tenant.name ?? blank.name,
+    tenantEndpoint: tenant.tenantEndpoint ?? blank.tenantEndpoint,
+    platformToken: tenant.platformToken ?? blank.platformToken,
+    clientId: tenant.clientId ?? blank.clientId,
+    clientSecret: tenant.clientSecret ?? blank.clientSecret,
+    ssoEndpoint: ssoEndpointOverride(tenant),
+    scopes: (tenant.scopes ?? REQUIRED_SCOPES).join("\n"),
+  };
 }
 
 /**

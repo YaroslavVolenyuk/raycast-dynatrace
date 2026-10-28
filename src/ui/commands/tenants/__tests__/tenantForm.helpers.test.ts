@@ -7,6 +7,7 @@ import {
   REQUIRED_SCOPES,
   describeScopeCheck,
   ssoEndpointOverride,
+  initialFormValues,
   type TenantFormValues,
 } from "../tenantForm.helpers";
 import { normalizeUrl } from "../../../../services/environmentUrl";
@@ -239,5 +240,106 @@ describe("ssoEndpointOverride (SSO field when editing)", () => {
       ssoEndpoint: "https://sso.example.com/token",
     };
     expect(ssoEndpointOverride(custom)).toBe("https://sso.example.com/token");
+  });
+});
+
+describe("validateForm (exact messages and order)", () => {
+  it("reports every problem, in field order", () => {
+    const errs = validateForm(
+      validValues({
+        name: "",
+        tenantEndpoint: "",
+        clientId: "",
+        clientSecret: "",
+        ssoEndpoint: "http://x",
+        scopes: "",
+      }),
+    );
+    expect(Object.keys(errs)).toEqual(["name", "tenantEndpoint", "clientId", "clientSecret", "ssoEndpoint", "scopes"]);
+    expect(errs).toMatchObject({
+      name: "Name is required",
+      clientId: "Client ID is required",
+      clientSecret: "Client Secret is required",
+      ssoEndpoint: "Must be a valid https:// URL",
+      scopes: "At least one scope is required",
+    });
+  });
+
+  it("accepts a blank SSO endpoint for OAuth and ignores OAuth fields for tokens", () => {
+    expect(validateForm(validValues({ ssoEndpoint: " " }))).toEqual({});
+    const token = validateForm(validValues({ authType: "token", platformToken: "", clientId: "", ssoEndpoint: "x" }));
+    expect(token).toEqual({ platformToken: "Platform token is required" });
+  });
+
+  it("explains the classic API token rejection", () => {
+    expect(validateForm(validValues({ authType: "token", platformToken: "dt0c01.A.B" })).platformToken).toBe(
+      "This is a classic API token; use a platform token (dt0s16.…)",
+    );
+  });
+});
+
+describe("describeScopeCheck optional-scope hint", () => {
+  it("names the scope and how to get it, per credentials kind", () => {
+    expect(describeScopeCheck({ scopes: [...REQUIRED_SCOPES] })).toEqual({
+      style: "success",
+      title: "Connection verified",
+      message:
+        "Optional, for Problems in Menu Bar: grant storage:events:read to the OAuth client, then add it to this tenant's scopes",
+    });
+    expect(describeScopeCheck({ scopes: [...REQUIRED_SCOPES], platformToken: "dt0s16.A.B" }).message).toBe(
+      "Optional, for Problems in Menu Bar: a token with storage:events:read, listed in this tenant's scopes",
+    );
+  });
+});
+
+describe("initialFormValues", () => {
+  it("starts a new tenant on a platform token with the required scopes", () => {
+    expect(initialFormValues()).toEqual({
+      authType: "token",
+      name: "",
+      tenantEndpoint: "",
+      platformToken: "",
+      clientId: "",
+      clientSecret: "",
+      ssoEndpoint: "",
+      scopes: REQUIRED_SCOPES.join("\n"),
+    });
+  });
+
+  it("loads an OAuth tenant with its SSO shown only when it is an override", () => {
+    const tenant = {
+      id: "t1",
+      name: "Prod",
+      tenantEndpoint: "https://abc12345.apps.dynatrace.com",
+      clientId: "dt0s02.A",
+      clientSecret: "secret",
+      ssoEndpoint: DEFAULT_SSO_ENDPOINT,
+      scopes: ["storage:logs:read", "storage:spans:read"],
+    };
+    expect(initialFormValues(tenant)).toMatchObject({
+      authType: "oauth",
+      name: "Prod",
+      platformToken: "",
+      clientId: "dt0s02.A",
+      ssoEndpoint: "",
+      scopes: "storage:logs:read\nstorage:spans:read",
+    });
+    expect(initialFormValues({ ...tenant, ssoEndpoint: "https://sso.example.com/t" }).ssoEndpoint).toBe(
+      "https://sso.example.com/t",
+    );
+  });
+
+  it("loads a platform-token tenant as token auth", () => {
+    const tenant = {
+      id: "t2",
+      name: "Tok",
+      tenantEndpoint: "https://abc12345.apps.dynatrace.com",
+      clientId: "",
+      clientSecret: "",
+      ssoEndpoint: "",
+      platformToken: "dt0s16.A.B",
+      scopes: [...REQUIRED_SCOPES],
+    };
+    expect(initialFormValues(tenant)).toMatchObject({ authType: "token", platformToken: "dt0s16.A.B" });
   });
 });

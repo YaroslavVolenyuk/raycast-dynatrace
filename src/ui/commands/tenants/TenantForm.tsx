@@ -4,20 +4,18 @@
 // (testTenantConnection), so the user knows the tenant works before it is
 // persisted.
 
-import { Form, ActionPanel, Action, Icon, Alert, confirmAlert, showToast, Toast, useNavigation } from "@raycast/api";
+import { Form, ActionPanel, Action, Icon, showToast, Toast, useNavigation } from "@raycast/api";
 import { useState } from "react";
 import type { TenantConfig } from "../../../sdk/auth";
-import { testTenantConnection } from "../../../sdk";
-import { saveTenant, setActiveTenant, listTenants, deleteTenant } from "../../../services";
 import {
   REQUIRED_SCOPES,
   buildTenantConfig,
-  describeScopeCheck,
-  ssoEndpointOverride,
+  initialFormValues,
   validateForm,
   type AuthType,
   type TenantFormValues,
 } from "./tenantForm.helpers";
+import { confirmAndDeleteTenant, saveTenantAndActivateFirst, verifyTenantConnection } from "./tenantActions";
 
 interface TenantFormProps {
   /** Existing tenant to edit. Omit to create a new one. */
@@ -32,17 +30,7 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
   const [isSaving, setIsSaving] = useState(false);
   // Every field is controlled. Mixing uncontrolled (defaultValue) fields with the
   // controlled scopes field let a re-render wipe what the user had typed.
-  const [values, setValues] = useState<TenantFormValues>({
-    // New tenants start with the platform token: no admin needed to create one.
-    authType: tenant && !tenant.platformToken ? "oauth" : "token",
-    name: tenant?.name ?? "",
-    tenantEndpoint: tenant?.tenantEndpoint ?? "",
-    platformToken: tenant?.platformToken ?? "",
-    clientId: tenant?.clientId ?? "",
-    clientSecret: tenant?.clientSecret ?? "",
-    ssoEndpoint: tenant ? ssoEndpointOverride(tenant) : "",
-    scopes: (tenant?.scopes ?? REQUIRED_SCOPES).join("\n"),
-  });
+  const [values, setValues] = useState<TenantFormValues>(() => initialFormValues(tenant));
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof TenantFormValues, string>>>({});
 
   /** Props for a controlled field: value, change handler that also clears its error, and error. */
@@ -69,35 +57,9 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
     const config = buildTenantConfig(values, tenant?.id);
     setIsSaving(true);
     try {
-      if (test) {
-        const toast = await showToast({ style: Toast.Style.Animated, title: "Testing connection…" });
-        const result = await testTenantConnection(config);
-        if (!result.valid) {
-          toast.style = Toast.Style.Failure;
-          toast.title = "Connection failed";
-          toast.message = result.error;
-          return; // keep the form open so the user can fix credentials
-        }
-        const check = describeScopeCheck(config, result);
-        if (check.style === "failure") {
-          // Not saved: the next toast ("Tenant added") would hide this one at once.
-          toast.style = Toast.Style.Failure;
-          toast.title = check.title;
-          toast.message = [check.message, "fix it, or keep the tenant with Save Without Testing"]
-            .filter(Boolean)
-            .join(" — ");
-          return;
-        }
-        toast.style = Toast.Style.Success;
-        toast.title = check.title;
-        if (check.message) toast.message = check.message;
-      }
+      if (test && !(await verifyTenantConnection(config))) return;
 
-      await saveTenant(config);
-
-      // First tenant added becomes active automatically so commands work at once.
-      const all = await listTenants();
-      if (all.length === 1) await setActiveTenant(config.id);
+      await saveTenantAndActivateFirst(config);
 
       await showToast({
         style: Toast.Style.Success,
@@ -118,16 +80,7 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
   }
 
   async function handleDelete() {
-    if (!tenant) return;
-    const confirmed = await confirmAlert({
-      title: `Delete “${tenant.name}”?`,
-      message: "This removes the stored credentials from this machine. This cannot be undone.",
-      icon: Icon.Trash,
-      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
-    });
-    if (!confirmed) return;
-    await deleteTenant(tenant.id);
-    await showToast({ style: Toast.Style.Success, title: "Tenant deleted", message: tenant.name });
+    if (!tenant || !(await confirmAndDeleteTenant(tenant))) return;
     onSaved?.();
     pop();
   }

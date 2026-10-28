@@ -19,7 +19,8 @@ import { usePromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
 import { testTenantConnection } from "../../../sdk";
 import { describeScopeCheck } from "./tenantForm.helpers";
-import { setActiveTenant, deleteTenant, resetTenants, readTenantState } from "../../../services";
+import { confirmAndDeleteTenant } from "./tenantActions";
+import { setActiveTenant, resetTenants, readTenantState } from "../../../services";
 import TenantForm from "./TenantForm";
 
 export default function ManageTenants() {
@@ -62,16 +63,7 @@ export default function ManageTenants() {
   }
 
   async function handleDelete(tenant: TenantConfig) {
-    const confirmed = await confirmAlert({
-      title: `Delete “${tenant.name}”?`,
-      message: "This removes the stored credentials from this machine. This cannot be undone.",
-      icon: Icon.Trash,
-      primaryAction: { title: "Delete", style: Alert.ActionStyle.Destructive },
-    });
-    if (!confirmed) return;
-    await deleteTenant(tenant.id);
-    await showToast({ style: Toast.Style.Success, title: "Tenant deleted", message: tenant.name });
-    revalidate();
+    if (await confirmAndDeleteTenant(tenant)) revalidate();
   }
 
   async function handleReset() {
