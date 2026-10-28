@@ -1,6 +1,6 @@
 import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
-import { usePromise } from "@raycast/utils";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
+import type { TenantConfig } from "../../../sdk/auth";
 import {
   listSpans,
   formatDuration,
@@ -9,12 +9,14 @@ import {
   type SpanStatus,
 } from "../../../sdk/resources";
 import { liveTransport } from "../../../sdk";
-import { useActiveTenant } from "../../hooks";
+import { useActiveTenant, useTenantQuery } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
-import { TIMEFRAMES, pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
-import EmptyTenantState from "../../components/EmptyTenantState";
-import TenantActions, { ManageTenantsAction } from "../../components/TenantActions";
+import { pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
+import { listSectionSubtitle, listSectionTitle } from "../../lib/sectionTitle";
+import TenantActions from "../../components/TenantActions";
+import { tenantQueryFallback } from "../../components/TenantQueryFallback";
+import TimeframeSubmenu from "../../components/TimeframeSubmenu";
 import TraceDetail from "./TraceDetail";
 
 interface CommandArguments {
@@ -50,6 +52,53 @@ function kindIcon(kind: string): Icon {
   }
 }
 
+function SpanItem(props: { entry: SpanEntry; onOpen: () => void; listActions: ActionPanel.Props["children"] }) {
+  const { entry } = props;
+  const duration = entry.durationUs != null ? formatDuration(entry.durationUs) : undefined;
+  const durationSuffix = duration !== undefined ? ` · ${duration}` : "";
+  return (
+    <List.Item
+      icon={{ source: kindIcon(entry.kind), tintColor: statusColor(entry.statusCode) }}
+      title={{
+        value: `${entry.service ?? "Unknown service"}${durationSuffix}`,
+        tooltip: duration !== undefined ? `Duration: ${duration}` : undefined,
+      }}
+      subtitle={entry.name.length > 55 ? entry.name.slice(0, 52) + "…" : entry.name}
+      accessories={[{ tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } }]}
+      actions={
+        <ActionPanel>
+          <Action title="Open Details" icon={Icon.ArrowRight} onAction={props.onOpen} />
+          <Action.CopyToClipboard
+            title="Copy Trace ID"
+            content={entry.traceId}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
+          />
+          <Action.CopyToClipboard
+            title="Copy Span ID"
+            content={entry.spanId}
+            shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
+          />
+          {props.listActions}
+        </ActionPanel>
+      }
+    />
+  );
+}
+
+function fetchSpans(
+  tenant: TenantConfig,
+  [tf, tid, st]: [TimeframeValue, string | undefined, SpanStatus],
+  signal: AbortSignal | undefined,
+) {
+  return listSpans(liveTransport, tenant, {
+    timeframeDql: tf,
+    timeframe: parseTimeframe(tf),
+    traceId: tid,
+    status: st,
+    signal,
+  });
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 /**
@@ -72,34 +121,16 @@ export default function SearchTraces(props: {
   const { push } = useNavigation();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<SpanStatus>("all");
-  const abortable = useRef<AbortController>(null);
 
   const { tenant, tenants, isLoading: tenantLoading, error: tenantError, reload: reloadTenants } = useActiveTenant();
   const tenantActions = <TenantActions tenant={tenant} tenants={tenants} onChanged={reloadTenants} />;
 
-  const {
-    data: fetched,
-    isLoading,
-    error,
-    revalidate,
-  } = usePromise(
-    async (tf: TimeframeValue, tid: string | undefined, st: SpanStatus, tenantId: string) => {
-      const page = await listSpans(liveTransport, tenant!, {
-        timeframeDql: tf,
-        timeframe: parseTimeframe(tf),
-        traceId: tid,
-        status: st,
-        signal: abortable.current?.signal,
-      });
-      return { ...page, tenantId };
-    },
-    [timeframeStr, initialTraceId, status, tenant?.id ?? ""],
-    { execute: !!tenant, abortable },
-  );
+  const { data, isLoading, error, revalidate } = useTenantQuery(tenant, fetchSpans, [
+    timeframeStr,
+    initialTraceId,
+    status,
+  ]);
 
-  // usePromise keeps the previous result while the next one loads: after a tenant
-  // switch that would list the old tenant's spans under the new tenant's name.
-  const data = fetched?.tenantId === tenant?.id ? fetched : undefined;
   const skipped = data?.skipped ?? 0;
   const entries = useMemo<SpanEntry[]>(() => {
     const all = data?.entries ?? [];
@@ -110,75 +141,26 @@ export default function SearchTraces(props: {
     );
   }, [data, search]);
 
-  // A corrupted tenant store must surface as an error, not as "no tenant".
-  if (tenantError) {
-    return (
-      <List isLoading={false}>
-        <List.EmptyView
-          icon={Icon.Warning}
-          title="Could Not Load Tenants"
-          description={tenantError}
-          actions={
-            <ActionPanel>
-              <ManageTenantsAction onChanged={reloadTenants} />
-            </ActionPanel>
-          }
-        />
-      </List>
-    );
-  }
-
-  if (!tenantLoading && !tenant) {
-    return (
-      <List isLoading={false}>
-        <EmptyTenantState onChanged={reloadTenants} />
-      </List>
-    );
-  }
-
-  if (error && !isLoading) {
-    return (
-      <List isLoading={false}>
-        <List.EmptyView
-          icon={Icon.Warning}
-          title="Query Failed"
-          description={error instanceof Error ? error.message : String(error)}
-          actions={
-            <ActionPanel>
-              <Action title="Retry" icon={Icon.ArrowClockwise} onAction={() => revalidate()} />
-              {tenantActions}
-            </ActionPanel>
-          }
-        />
-      </List>
-    );
-  }
+  const fallback = tenantQueryFallback({
+    tenant,
+    tenantLoading,
+    tenantError,
+    reloadTenants,
+    isLoading,
+    error,
+    revalidate,
+    tenantActions,
+  });
+  if (fallback) return fallback;
 
   // Only the view pushed from a log detail gets its own title: Raycast asks root
   // commands to keep theirs, so the tenant goes in the section title instead.
   const navigationTitle = props.initialTraceId ? `Trace ${props.initialTraceId.slice(0, 8)}…` : undefined;
   const sectionTitle = data
-    ? [`${entries.length} span${entries.length === 1 ? "" : "s"}`, timeframeTitle(timeframeStr), tenant?.name]
-        .filter(Boolean)
-        .join(" · ")
+    ? listSectionTitle(entries.length, "span", [timeframeTitle(timeframeStr), tenant?.name])
     : undefined;
-  const timeframeActions = (
-    <ActionPanel.Submenu
-      title="Change Timeframe"
-      icon={Icon.Clock}
-      shortcut={{ modifiers: ["cmd", "shift"], key: "t" }}
-    >
-      {TIMEFRAMES.map((t) => (
-        <Action
-          key={t.value}
-          title={t.title}
-          icon={t.value === timeframeStr ? Icon.Checkmark : undefined}
-          onAction={() => setTimeframe(t.value)}
-        />
-      ))}
-    </ActionPanel.Submenu>
-  );
-  const sectionSubtitle = skipped ? `${skipped} record${skipped === 1 ? "" : "s"} could not be read` : undefined;
+  const timeframeActions = <TimeframeSubmenu value={timeframeStr} onChange={setTimeframe} />;
+  const sectionSubtitle = listSectionSubtitle(skipped);
 
   return (
     <List
@@ -213,32 +195,12 @@ export default function SearchTraces(props: {
       />
       <List.Section title={sectionTitle} subtitle={sectionSubtitle}>
         {entries.map((entry, index) => (
-          <List.Item
+          <SpanItem
             key={`${entry.traceId}-${entry.spanId}-${index}`}
-            icon={{ source: kindIcon(entry.kind), tintColor: statusColor(entry.statusCode) }}
-            title={{
-              value: `${entry.service ?? "Unknown service"}${entry.durationUs != null ? ` · ${formatDuration(entry.durationUs)}` : ""}`,
-              tooltip: entry.durationUs != null ? `Duration: ${formatDuration(entry.durationUs)}` : undefined,
-            }}
-            subtitle={entry.name.length > 55 ? entry.name.slice(0, 52) + "…" : entry.name}
-            accessories={[{ tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } }]}
-            actions={
-              <ActionPanel>
-                <Action
-                  title="Open Details"
-                  icon={Icon.ArrowRight}
-                  onAction={() => push(<TraceDetail entry={entry} tenant={tenant ?? undefined} />)}
-                />
-                <Action.CopyToClipboard
-                  title="Copy Trace ID"
-                  content={entry.traceId}
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "i" }}
-                />
-                <Action.CopyToClipboard
-                  title="Copy Span ID"
-                  content={entry.spanId}
-                  shortcut={{ modifiers: ["cmd", "shift"], key: "s" }}
-                />
+            entry={entry}
+            onOpen={() => push(<TraceDetail entry={entry} tenant={tenant ?? undefined} />)}
+            listActions={
+              <>
                 <Action
                   title="Refresh"
                   icon={Icon.ArrowClockwise}
@@ -247,7 +209,7 @@ export default function SearchTraces(props: {
                 />
                 {timeframeActions}
                 {tenantActions}
-              </ActionPanel>
+              </>
             }
           />
         ))}
