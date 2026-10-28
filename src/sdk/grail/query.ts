@@ -3,9 +3,10 @@
 // UI hooks wrap these for view-commands; background commands call them directly.
 
 import { ZodError } from "zod";
-import { credentialsKind, getAccessToken, invalidateTokenCache, OAuthError, TenantConfig } from "../auth";
+import { credentialsKind, getAccessToken, invalidateTokenCache, TenantConfig } from "../auth";
 import { grailResponseSchema, type GrailNotification } from "./schema";
-import { environmentNetworkError, isNetworkError, ssoNetworkError } from "./network";
+import { acquireAccessToken, parseErrorBody } from "./http";
+import { environmentNetworkError, isNetworkError } from "./network";
 
 export interface GrailQueryOptions {
   timeframe?: { start: string; end: string };
@@ -86,20 +87,6 @@ function notRespondingError(timeout: RequestTimeout): Error {
   return new Error(`Dynatrace is not responding (${Math.round(timeout.ms / 1000)}s timeout)`);
 }
 
-/** Gets an access token, mapping OAuth and SSO network failures to user-facing errors. */
-async function acquireAccessToken(tenant: TenantConfig, timeout: RequestTimeout): Promise<string> {
-  try {
-    return await getAccessToken(tenant);
-  } catch (authErr) {
-    timeout.clear();
-    if (authErr instanceof OAuthError) {
-      throw new Error(`OAuth error: check client_id / client_secret in Manage Tenants (${authErr.statusCode})`);
-    }
-    if (isNetworkError(authErr)) throw ssoNetworkError(authErr, tenant.ssoEndpoint);
-    throw authErr;
-  }
-}
-
 /** Sends query:execute and reads the body; the timeout is cleared either way. */
 async function postExecute(
   endpoint: string,
@@ -130,13 +117,8 @@ async function postExecute(
 
 /** The `Dynatrace: <message> (code <code>)` error of a JSON error body, if it has one. */
 function bodyErrorMessage(rawText: string): string | undefined {
-  try {
-    const errBody = JSON.parse(rawText);
-    if (errBody?.error?.message) return `Dynatrace: ${errBody.error.message} (code ${errBody.error.code})`;
-  } catch {
-    // not JSON — fall through to the status line
-  }
-  return undefined;
+  const body = parseErrorBody(rawText);
+  return body && `Dynatrace: ${body.message} (code ${body.code})`;
 }
 
 /** Maps a non-2xx query:execute response to a user-facing error; undefined when the response is ok. */
@@ -243,7 +225,10 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
   const { signal: userSignal, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
 
   const timeout = startRequestTimeout(userSignal, timeoutMs);
-  const accessToken = await acquireAccessToken(tenant, timeout);
+  const accessToken = await acquireAccessToken(tenant).catch((err: unknown) => {
+    timeout.clear();
+    throw err;
+  });
 
   const endpoint = `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/query:execute`;
   const payload = buildExecutePayload(query, options);

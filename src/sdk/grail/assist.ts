@@ -10,8 +10,9 @@
 //   - suggestion parts carry undocumented dataType / category / priority / reference
 
 import { z } from "zod";
-import { getAccessToken, invalidateTokenCache, OAuthError, type TenantConfig } from "../auth";
-import { environmentNetworkError, isNetworkError, ssoNetworkError } from "./network";
+import { invalidateTokenCache, type TenantConfig } from "../auth";
+import { acquireAccessToken, parseErrorBody } from "./http";
+import { environmentNetworkError, isNetworkError } from "./network";
 
 const TIMEOUT_MS = 10_000;
 
@@ -96,55 +97,50 @@ export interface DqlCompletion {
 
 // ── HTTP ──────────────────────────────────────────────────────────────────────
 
-async function postQueryApi(
-  tenant: TenantConfig,
-  path: "query:verify" | "query:autocomplete",
-  body: Record<string, unknown>,
-  signal: AbortSignal | undefined,
-  isRetry = false,
-): Promise<unknown> {
-  let accessToken: string;
-  try {
-    accessToken = await getAccessToken(tenant);
-  } catch (authErr) {
-    if (authErr instanceof OAuthError) {
-      throw new Error(`OAuth error: check client_id / client_secret in Manage Tenants (${authErr.statusCode})`);
-    }
-    if (isNetworkError(authErr)) throw ssoNetworkError(authErr, tenant.ssoEndpoint);
-    throw authErr;
-  }
+interface QueryApiRequest {
+  path: "query:verify" | "query:autocomplete";
+  body: Record<string, unknown>;
+  signal: AbortSignal | undefined;
+}
 
-  const endpoint = `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/${path}`;
+/** Sends the request with the 10 s timeout; maps timeout and network failures to user-facing errors. */
+async function postWithTimeout(
+  endpoint: string,
+  accessToken: string,
+  { body, signal }: QueryApiRequest,
+): Promise<{ response: Response; rawText: string }> {
   const timeoutSignal = AbortSignal.timeout(TIMEOUT_MS);
-  let response: Response;
-  let rawText: string;
   try {
-    response = await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
     });
-    rawText = await response.text();
+    return { response, rawText: await response.text() };
   } catch (fetchErr) {
     if (timeoutSignal.aborted) throw new Error(`Dynatrace is not responding (${TIMEOUT_MS / 1000}s timeout)`);
     if (isNetworkError(fetchErr)) throw environmentNetworkError(fetchErr, endpoint);
     throw fetchErr; // includes the caller's AbortError
   }
+}
+
+/** Error for a non-2xx response: Dynatrace's own message when the body has one, else the status line. */
+function httpError(status: number, rawText: string, path: string): Error {
+  const body = parseErrorBody(rawText);
+  return new Error(body ? `Dynatrace: ${body.message}` : `HTTP ${status} from ${path}`);
+}
+
+async function postQueryApi(tenant: TenantConfig, request: QueryApiRequest, isRetry = false): Promise<unknown> {
+  const accessToken = await acquireAccessToken(tenant);
+  const endpoint = `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/${request.path}`;
+  const { response, rawText } = await postWithTimeout(endpoint, accessToken, request);
 
   if (response.status === 401 && !isRetry) {
     invalidateTokenCache(tenant.id);
-    return postQueryApi(tenant, path, body, signal, true);
+    return postQueryApi(tenant, request, true);
   }
-  if (!response.ok) {
-    let message: string | undefined;
-    try {
-      message = JSON.parse(rawText)?.error?.message;
-    } catch {
-      // not JSON — fall through to the status line
-    }
-    throw new Error(message ? `Dynatrace: ${message}` : `HTTP ${response.status} from ${path}`);
-  }
+  if (!response.ok) throw httpError(response.status, rawText, request.path);
   return JSON.parse(rawText);
 }
 
@@ -173,7 +169,9 @@ export async function verifyDql(
   query: string,
   opts: { signal?: AbortSignal } = {},
 ): Promise<DqlVerification> {
-  return normalizeVerification(await postQueryApi(tenant, "query:verify", { query }, opts.signal));
+  return normalizeVerification(
+    await postQueryApi(tenant, { path: "query:verify", body: { query }, signal: opts.signal }),
+  );
 }
 
 const TRAILING_PARTS = new Set(["SPACE", "PARENTHESIS_OPEN"]);
@@ -209,12 +207,11 @@ export async function autocompleteDql(
   query: string,
   opts: { cursorPosition?: number; signal?: AbortSignal } = {},
 ): Promise<DqlCompletion> {
-  const raw = await postQueryApi(
-    tenant,
-    "query:autocomplete",
-    { query, cursorPosition: opts.cursorPosition ?? query.length, maxDataSuggestions: 50 },
-    opts.signal,
-  );
+  const raw = await postQueryApi(tenant, {
+    path: "query:autocomplete",
+    body: { query, cursorPosition: opts.cursorPosition ?? query.length, maxDataSuggestions: 50 },
+    signal: opts.signal,
+  });
   return normalizeCompletion(raw);
 }
 
