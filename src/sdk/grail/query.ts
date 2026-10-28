@@ -62,110 +62,127 @@ function combineSignals(a: AbortSignal, b: AbortSignal): AbortSignal {
   return ctrl.signal;
 }
 
-/**
- * Executes a DQL query against the Dynatrace Grail API.
- * Handles token refresh, 401-retry-once, structured error messages, and client timeout.
- * Throws on any error — caller is responsible for error handling / UI feedback.
- */
-export async function executeDqlQuery<T = Record<string, unknown>>(
-  tenant: TenantConfig,
-  query: string,
-  options: GrailQueryOptions = {},
-  _isRetry = false,
-): Promise<T[]> {
-  const { timeframe, signal: userSignal, maxResultRecords, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+/** Client-side timeout for one request, combined with the caller's signal. */
+interface RequestTimeout {
+  signal: AbortSignal;
+  ms: number;
+  /** True when the timeout (not the caller) aborted the request. */
+  timedOut: () => boolean;
+  clear: () => void;
+}
 
+function startRequestTimeout(userSignal: AbortSignal | undefined, timeoutMs: number): RequestTimeout {
   const timeoutCtrl = new AbortController();
   const timeout = setTimeout(() => timeoutCtrl.abort(), timeoutMs);
-  const signal = userSignal ? combineSignals(userSignal, timeoutCtrl.signal) : timeoutCtrl.signal;
+  return {
+    signal: userSignal ? combineSignals(userSignal, timeoutCtrl.signal) : timeoutCtrl.signal,
+    ms: timeoutMs,
+    timedOut: () => timeoutCtrl.signal.aborted,
+    clear: () => clearTimeout(timeout),
+  };
+}
 
-  let accessToken: string;
+function notRespondingError(timeout: RequestTimeout): Error {
+  return new Error(`Dynatrace is not responding (${Math.round(timeout.ms / 1000)}s timeout)`);
+}
+
+/** Gets an access token, mapping OAuth and SSO network failures to user-facing errors. */
+async function acquireAccessToken(tenant: TenantConfig, timeout: RequestTimeout): Promise<string> {
   try {
-    accessToken = await getAccessToken(tenant);
+    return await getAccessToken(tenant);
   } catch (authErr) {
-    clearTimeout(timeout);
+    timeout.clear();
     if (authErr instanceof OAuthError) {
       throw new Error(`OAuth error: check client_id / client_secret in Manage Tenants (${authErr.statusCode})`);
     }
     if (isNetworkError(authErr)) throw ssoNetworkError(authErr, tenant.ssoEndpoint);
     throw authErr;
   }
+}
 
-  const endpoint = `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/query:execute`;
-  const payload = {
-    ...BASE_PAYLOAD,
-    query,
-    ...(maxResultRecords != null && { maxResultRecords }),
-    ...(timeframe && { defaultTimeframeStart: timeframe.start, defaultTimeframeEnd: timeframe.end }),
-  };
-
-  let response: Response;
-  let rawText: string;
+/** Sends query:execute and reads the body; the timeout is cleared either way. */
+async function postExecute(
+  endpoint: string,
+  accessToken: string,
+  payload: Record<string, unknown>,
+  timeout: RequestTimeout,
+): Promise<{ response: Response; rawText: string }> {
   try {
-    response = await fetch(endpoint, {
+    const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify(payload),
-      signal,
+      signal: timeout.signal,
     });
-    rawText = await response.text();
+    return { response, rawText: await response.text() };
   } catch (fetchErr) {
-    clearTimeout(timeout);
     if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
       // Distinguish timeout abort from user/unmount abort
-      if (timeoutCtrl.signal.aborted) {
-        throw new Error(`Dynatrace is not responding (${Math.round(timeoutMs / 1000)}s timeout)`);
-      }
+      if (timeout.timedOut()) throw notRespondingError(timeout);
       throw fetchErr; // let caller handle user abort (AbortError swallowed as null in hook)
     }
     if (isNetworkError(fetchErr)) throw environmentNetworkError(fetchErr, endpoint);
     throw fetchErr;
   } finally {
-    clearTimeout(timeout);
+    timeout.clear();
   }
+}
 
-  // 401: invalidate cached token and retry once. A platform token is used as is,
-  // so asking again would only repeat the same request.
-  if (response.status === 401 && !_isRetry && !tenant.platformToken) {
-    invalidateTokenCache(tenant.id);
-    return executeDqlQuery<T>(tenant, query, { ...options, signal: userSignal }, true);
+/** The `Dynatrace: <message> (code <code>)` error of a JSON error body, if it has one. */
+function bodyErrorMessage(rawText: string): string | undefined {
+  try {
+    const errBody = JSON.parse(rawText);
+    if (errBody?.error?.message) return `Dynatrace: ${errBody.error.message} (code ${errBody.error.code})`;
+  } catch {
+    // not JSON — fall through to the status line
   }
+  return undefined;
+}
 
+/** Maps a non-2xx query:execute response to a user-facing error; undefined when the response is ok. */
+function toHttpError(
+  response: Response,
+  rawText: string,
+  tenant: TenantConfig,
+  requiredScopes: readonly string[] | undefined,
+): Error | undefined {
   if (response.status === 401) {
-    throw new Error(
+    return new Error(
       `Authentication failed — the ${credentialsKind(tenant)} was rejected by Dynatrace. Check the tenant in Manage Tenants.`,
     );
   }
   if (response.status === 403) {
-    throw new Error(
+    return new Error(
       `Access denied — the ${credentialsKind(tenant)} is missing required scopes${
-        options.requiredScopes?.length ? ` (${options.requiredScopes.join(", ")})` : ""
+        requiredScopes?.length ? ` (${requiredScopes.join(", ")})` : ""
       }. Check Manage Tenants.`,
     );
   }
+  if (response.ok) return undefined;
+  const bodyError = bodyErrorMessage(rawText);
+  if (bodyError) return new Error(bodyError);
+  const preview = rawText.trimStart().startsWith("<")
+    ? `Server returned HTML (status ${response.status}). Check your tenant endpoint URL.`
+    : `HTTP ${response.status}: ${rawText.slice(0, 300)}`;
+  return new Error(preview);
+}
 
-  if (!response.ok) {
-    try {
-      const errBody = JSON.parse(rawText);
-      if (errBody?.error?.message) {
-        throw new Error(`Dynatrace: ${errBody.error.message} (code ${errBody.error.code})`);
-      }
-    } catch (parseErr) {
-      if (parseErr instanceof Error && parseErr.message.startsWith("Dynatrace:")) throw parseErr;
-    }
-    const preview = rawText.trimStart().startsWith("<")
-      ? `Server returned HTML (status ${response.status}). Check your tenant endpoint URL.`
-      : `HTTP ${response.status}: ${rawText.slice(0, 300)}`;
-    throw new Error(preview);
-  }
+type GrailBody = ReturnType<typeof parseGrailBody>;
 
-  let parsedResponse = parseGrailBody(rawText);
-
-  // Long-running query: poll query:poll with the request token until it
-  // finishes or the deadline expires. If we give up for any reason (deadline,
-  // abort, poll error) the query is cancelled server-side: otherwise it keeps
-  // scanning — and billing — with nobody waiting for the result.
+/**
+ * Long-running query: poll query:poll with the request token until it
+ * finishes or the deadline expires. If we give up for any reason (deadline,
+ * abort, poll error) the query is cancelled server-side: otherwise it keeps
+ * scanning — and billing — with nobody waiting for the result.
+ */
+async function pollUntilDone(
+  tenant: TenantConfig,
+  initial: GrailBody,
+  options: GrailQueryOptions,
+  timeoutMs: number,
+): Promise<GrailBody> {
   const deadline = Date.now() + (options.pollDeadlineMs ?? DEFAULT_POLL_DEADLINE_MS);
+  let parsedResponse = initial;
   let runningToken: string | undefined;
   try {
     while (parsedResponse.state !== "SUCCEEDED" && parsedResponse.state !== "FAILED") {
@@ -177,22 +194,75 @@ export async function executeDqlQuery<T = Record<string, unknown>>(
       if (Date.now() >= deadline) {
         throw new Error("Query did not finish in time — narrow the timeframe or reduce data volume");
       }
-      parsedResponse = await pollGrailQuery(tenant, token, userSignal, timeoutMs);
+      parsedResponse = await pollGrailQuery(tenant, token, options.signal, timeoutMs);
     }
   } catch (pollErr) {
     if (runningToken) void cancelGrailQuery(tenant, runningToken);
     throw pollErr;
   }
+  return parsedResponse;
+}
 
+function buildExecutePayload(query: string, options: GrailQueryOptions) {
+  const { timeframe, maxResultRecords } = options;
+  return {
+    ...BASE_PAYLOAD,
+    query,
+    ...(maxResultRecords != null && { maxResultRecords }),
+    ...(timeframe && { defaultTimeframeStart: timeframe.start, defaultTimeframeEnd: timeframe.end }),
+  };
+}
+
+/** Throws for a query that finished as FAILED or carries an error. */
+function assertQuerySucceeded(parsedResponse: GrailBody): void {
   if (parsedResponse.state === "FAILED" || parsedResponse.error) {
     const err = parsedResponse.error;
     throw new Error(err ? `Dynatrace: ${err.message} (code ${err.code})` : "Dynatrace: query failed");
   }
+}
 
+/** Reports the notifications of a successful query and returns its records. */
+function toRecords<T>(parsedResponse: GrailBody, options: GrailQueryOptions): T[] {
   const notifications = parsedResponse.result?.metadata?.grail?.notifications;
   if (notifications?.length) options.onNotifications?.(notifications);
 
   return (parsedResponse.result?.records ?? []) as T[];
+}
+
+/**
+ * Executes a DQL query against the Dynatrace Grail API.
+ * Handles token refresh, 401-retry-once, structured error messages, and client timeout.
+ * Throws on any error — caller is responsible for error handling / UI feedback.
+ */
+export async function executeDqlQuery<T = Record<string, unknown>>(
+  tenant: TenantConfig,
+  query: string,
+  options: GrailQueryOptions = {},
+  _isRetry = false,
+): Promise<T[]> {
+  const { signal: userSignal, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
+
+  const timeout = startRequestTimeout(userSignal, timeoutMs);
+  const accessToken = await acquireAccessToken(tenant, timeout);
+
+  const endpoint = `${tenant.tenantEndpoint.replace(/\/$/, "")}/platform/storage/query/v1/query:execute`;
+  const payload = buildExecutePayload(query, options);
+
+  const { response, rawText } = await postExecute(endpoint, accessToken, payload, timeout);
+
+  // 401: invalidate cached token and retry once. A platform token is used as is,
+  // so asking again would only repeat the same request.
+  if (response.status === 401 && !_isRetry && !tenant.platformToken) {
+    invalidateTokenCache(tenant.id);
+    return executeDqlQuery<T>(tenant, query, { ...options, signal: userSignal }, true);
+  }
+
+  const httpError = toHttpError(response, rawText, tenant, options.requiredScopes);
+  if (httpError) throw httpError;
+
+  const parsedResponse = await pollUntilDone(tenant, parseGrailBody(rawText), options, timeoutMs);
+  assertQuerySucceeded(parsedResponse);
+  return toRecords<T>(parsedResponse, options);
 }
 
 /**
@@ -248,7 +318,7 @@ async function pollGrailQuery(
   requestToken: string,
   userSignal: AbortSignal | undefined,
   timeoutMs: number,
-): Promise<ReturnType<typeof parseGrailBody>> {
+): Promise<GrailBody> {
   // getAccessToken serves from the in-memory cache; a token expiring mid-poll
   // is refreshed transparently.
   const accessToken = await getAccessToken(tenant);
@@ -258,9 +328,7 @@ async function pollGrailQuery(
     `?request-token=${encodeURIComponent(requestToken)}` +
     `&request-timeout-milliseconds=${POLL_REQUEST_TIMEOUT_MS}`;
 
-  const timeoutCtrl = new AbortController();
-  const timeout = setTimeout(() => timeoutCtrl.abort(), timeoutMs);
-  const signal = userSignal ? combineSignals(userSignal, timeoutCtrl.signal) : timeoutCtrl.signal;
+  const timeout = startRequestTimeout(userSignal, timeoutMs);
 
   let response: Response;
   let rawText: string;
@@ -268,16 +336,16 @@ async function pollGrailQuery(
     response = await fetch(endpoint, {
       method: "GET",
       headers: { Authorization: `Bearer ${accessToken}` },
-      signal,
+      signal: timeout.signal,
     });
     rawText = await response.text();
   } catch (fetchErr) {
-    if (fetchErr instanceof Error && fetchErr.name === "AbortError" && timeoutCtrl.signal.aborted) {
-      throw new Error(`Dynatrace is not responding (${Math.round(timeoutMs / 1000)}s timeout)`);
+    if (fetchErr instanceof Error && fetchErr.name === "AbortError" && timeout.timedOut()) {
+      throw notRespondingError(timeout);
     }
     throw fetchErr;
   } finally {
-    clearTimeout(timeout);
+    timeout.clear();
   }
 
   if (response.status === 401) {

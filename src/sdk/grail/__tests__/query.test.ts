@@ -120,6 +120,26 @@ describe("401 retry", () => {
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("Authentication failed");
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it("keeps the caller's signal and callbacks on the retry", async () => {
+    const ctrl = new AbortController();
+    const onNotifications = jest.fn();
+    const notifications = [{ severity: "WARNING", notificationType: "RESULT_TRUNCATED", message: "Result truncated" }];
+    mockFetch
+      .mockResolvedValueOnce({ ok: false, status: 401, text: async () => "unauthorized" })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify({ state: "SUCCEEDED", result: { records: [], metadata: { grail: { notifications } } } }),
+      });
+
+    await executeDqlQuery(TENANT, "fetch logs", { signal: ctrl.signal, onNotifications });
+
+    expect(onNotifications).toHaveBeenCalledTimes(1);
+    ctrl.abort();
+    expect((mockFetch.mock.calls[1][1] as RequestInit).signal?.aborted).toBe(true);
+  });
 });
 
 describe("HTTP error responses", () => {
@@ -161,6 +181,18 @@ describe("HTTP error responses", () => {
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("Invalid DQL syntax at position 5");
   });
 
+  it("formats the JSON body error with its code", async () => {
+    mockFetch.mockResolvedValueOnce(grailError(400, { error: { code: 400, message: "bad" } }));
+
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^Dynatrace: bad \(code 400\)$/);
+  });
+
+  it("falls back to the HTTP status line for a JSON body without error.message", async () => {
+    mockFetch.mockResolvedValueOnce(grailError(500, { error: { code: 500 } }));
+
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^HTTP 500: \{"error":\{"code":500\}\}$/);
+  });
+
   it("falls back to HTTP status line for non-ok plain text body", async () => {
     mockFetch.mockResolvedValueOnce(grailError(500, "Internal Server Error"));
 
@@ -199,6 +231,22 @@ describe("response body errors", () => {
     });
 
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("bad query");
+  });
+
+  it("throws a generic message when state is FAILED without an error", async () => {
+    mockFetch.mockResolvedValueOnce(grailOk([], "FAILED"));
+
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^Dynatrace: query failed$/);
+  });
+
+  it("throws when a SUCCEEDED response carries an error", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ state: "SUCCEEDED", error: { code: 500, message: "partial" } }),
+    });
+
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^Dynatrace: partial \(code 500\)$/);
   });
 
   it("throws with field names on Zod schema mismatch", async () => {
@@ -375,6 +423,41 @@ describe("timeout and abort", () => {
       executeDqlQuery(TENANT, "fetch logs", { signal: userCtrl.signal, timeoutMs: 30_000 }),
     ).rejects.toMatchObject({ name: "AbortError" });
   });
+
+  it("clears the client timeout when getAccessToken fails", async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetAccessToken.mockRejectedValueOnce(new Error("boom"));
+      await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("boom");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("clears the client timeout once the response is read", async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetch.mockResolvedValueOnce(grailError(500, "Internal Server Error"));
+      await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 500");
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("counts token acquisition against the client timeout", async () => {
+    mockGetAccessToken.mockImplementationOnce(() => new Promise((r) => setTimeout(() => r("late-token"), 80)));
+    mockFetch.mockImplementationOnce((_url: unknown, opts: RequestInit) =>
+      opts.signal?.aborted
+        ? Promise.reject(Object.assign(new Error("The operation was aborted."), { name: "AbortError" }))
+        : Promise.resolve(grailOk([])),
+    );
+
+    await expect(executeDqlQuery(TENANT, "fetch logs", { timeoutMs: 20 })).rejects.toThrow(
+      /^Dynatrace is not responding \(0s timeout\)$/,
+    );
+  });
 });
 
 describe("network failures", () => {
@@ -393,5 +476,11 @@ describe("network failures", () => {
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(
       "Cannot reach the SSO endpoint sso.dynatrace.com",
     );
+  });
+
+  it("re-throws other fetch failures as-is", async () => {
+    const err = new Error("something else");
+    mockFetch.mockRejectedValueOnce(err);
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toBe(err);
   });
 });
