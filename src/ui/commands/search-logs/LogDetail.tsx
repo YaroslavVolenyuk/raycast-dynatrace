@@ -25,23 +25,30 @@ function valArray(v: unknown): string | undefined {
   return val(v);
 }
 
+// Status wins over level; both are matched upper-cased. Maps, not object
+// literals, so a value like "constructor" never hits the prototype.
+const STATUS_COLORS = new Map<string, Color>([
+  ["SUCCESS", Color.Green],
+  ["OK", Color.Green],
+  ["ERROR", Color.Red],
+  ["FAILED", Color.Red],
+  ["FAILURE", Color.Red],
+]);
+const LEVEL_COLORS = new Map<string, Color>([
+  ["WARN", Color.Yellow],
+  ["WARNING", Color.Yellow],
+  ["ERROR", Color.Red],
+  ["FATAL", Color.Red],
+  ["CRITICAL", Color.Red],
+  ["INFO", Color.Blue],
+]);
+
 function levelColor(level: string | undefined, status: string | undefined): Color {
-  const st = status?.toUpperCase();
-  if (st === "SUCCESS" || st === "OK") return Color.Green;
-  if (st === "ERROR" || st === "FAILED" || st === "FAILURE") return Color.Red;
-  switch (level?.toUpperCase()) {
-    case "WARN":
-    case "WARNING":
-      return Color.Yellow;
-    case "ERROR":
-    case "FATAL":
-    case "CRITICAL":
-      return Color.Red;
-    case "INFO":
-      return Color.Blue;
-    default:
-      return Color.SecondaryText;
-  }
+  return (
+    STATUS_COLORS.get(status?.toUpperCase() ?? "") ??
+    LEVEL_COLORS.get(level?.toUpperCase() ?? "") ??
+    Color.SecondaryText
+  );
 }
 
 function environmentColor(env: string | undefined): Color {
@@ -71,6 +78,99 @@ function buildLogContextQuery(raw: Record<string, unknown>, limit = 100): string
   return `fetch logs\n| limit ${limit}`;
 }
 
+// ── Field tables ───────────────────────────────────────────────────────────────
+
+type Raw = Record<string, unknown>;
+type Read = (raw: Raw, entry: LogEntry) => string | undefined;
+
+/** First non-empty value among `keys` (in order, like `val(a) ?? val(b)`). */
+const pick =
+  (...keys: string[]): Read =>
+  (raw) =>
+    keys.map((k) => val(raw[k])).find((v) => v !== undefined);
+
+/** A list-valued field, joined with ", ". */
+const list =
+  (key: string): Read =>
+  (raw) =>
+    valArray(raw[key]);
+
+/** A markdown table row: the label, and how to read it (defaults to the raw field named by the label). */
+type Row = readonly [label: string, read?: Read];
+
+// Topology: entity refs
+const TOPOLOGY_ROWS: readonly Row[] = [
+  ["dt.source_entity", list("dt.source_entity")],
+  ["dt.entity.host"],
+  ["dt.entity.process_group_instance"],
+  ["dt.entity.custom_device"],
+  ["dt.entity.aws_lambda_function"],
+];
+
+// Fields section — Infrastructure, Cloud, FaaS, K8s, Process, Pipeline, Telemetry
+const FIELD_ROWS: readonly Row[] = [
+  ["host.name", pick("host.name", "dt.entity.host")],
+  ["dt.host_group.id"],
+  ["cloud.provider"],
+  ["cloud.region", pick("aws.region", "cloud.region")],
+  ["aws.availability_zone"],
+  ["cloud.account.id", pick("aws.account.id", "cloud.account.id")],
+  ["aws.arn"],
+
+  ["faas.name"],
+  ["faas.version"],
+  ["faas.id"],
+
+  ["k8s.cluster.name"],
+  ["k8s.namespace.name"],
+  ["k8s.node.name"],
+  ["k8s.pod.uid"],
+
+  ["dt.app.name"],
+  ["dt.app.version"],
+  ["dt.process.name", pick("dt.process.name", "dt.process_group.detected_name")],
+  ["process.technology", list("process.technology")],
+  ["log.source", (_, entry) => entry.source],
+  ["OperatorVersion"],
+
+  ["dt.openpipeline.source"],
+  ["dt.openpipeline.pipelines", list("dt.openpipeline.pipelines")],
+  ["dt.auth.origin", pick("dt.auth.origin", "dt.auth_origin")],
+
+  ["trace_id", (_, entry) => entry.traceId],
+  ["span_id"],
+
+  ["event.type"],
+  ["dt.environment.id", pick("dt.environment.id", "environment")],
+];
+
+function rowTable(rows: readonly Row[], raw: Raw, entry: LogEntry): string {
+  return keyValueTable(rows.map(([label, read = pick(label)]) => [label, read(raw, entry)]));
+}
+
+function buildMarkdown(entry: LogEntry, raw: Raw, dqlFilter: string): string {
+  const sections: string[] = [formatLogContent(entry.content) ?? "_No content available_"];
+
+  const topologyTable = rowTable(TOPOLOGY_ROWS, raw, entry);
+  if (topologyTable) sections.push("### Topology", topologyTable);
+
+  const fieldsTable = rowTable(FIELD_ROWS, raw, entry);
+  if (fieldsTable) sections.push("### Fields", fieldsTable);
+
+  // DQL filter
+  sections.push("### DQL Filter *(⌘D to copy)*", fenceCode(dqlFilter));
+
+  // Raw JSON at the bottom
+  sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
+
+  return sections.join("\n\n");
+}
+
+function traceLink(tenant: TenantConfig | undefined, traceId: string | undefined): string | undefined {
+  const baseUrl = tenant?.tenantEndpoint?.replace(/\/$/, "") ?? "";
+  return traceId && baseUrl ? buildTraceUrl(baseUrl, traceId) : undefined;
+}
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function LogDetail({
@@ -84,157 +184,24 @@ export default function LogDetail({
   timeframe?: TimeframeValue;
 }) {
   const { push } = useNavigation();
-  const raw = entry.raw as Record<string, unknown>;
-  const baseUrl = tenant?.tenantEndpoint?.replace(/\/$/, "") ?? "";
+  const raw = entry.raw as Raw;
 
-  // ── Field values ─────────────────────────────────────────────────────────────
-
-  const loglevel = entry.level;
   const status = val(entry.status);
-  const eventType = val(raw["event.type"]);
-
   const serviceName = val(raw["service.name"]);
   const appName = val(raw["dt.app.name"]);
-  const appVersion = val(raw["dt.app.version"]);
-
-  const hostName = val(raw["host.name"]) ?? val(raw["dt.entity.host"]);
-  const hostGroup = val(raw["dt.host_group.id"]);
-
-  const awsRegion = val(raw["aws.region"]) ?? val(raw["cloud.region"]);
-  const awsAz = val(raw["aws.availability_zone"]);
-  const awsAccount = val(raw["aws.account.id"]) ?? val(raw["cloud.account.id"]);
-  const awsArn = val(raw["aws.arn"]);
-  const cloudProvider = val(raw["cloud.provider"]);
-
-  const faasId = val(raw["faas.id"]);
-  const faasName = val(raw["faas.name"]);
-  const faasVersion = val(raw["faas.version"]);
-
-  const k8sCluster = val(raw["k8s.cluster.name"]);
-  const k8sNamespace = val(raw["k8s.namespace.name"]);
-  const k8sNode = val(raw["k8s.node.name"]);
-  const k8sPodUid = val(raw["k8s.pod.uid"]);
-
-  const processName = val(raw["dt.process.name"]) ?? val(raw["dt.process_group.detected_name"]);
-  const processTech = valArray(raw["process.technology"]);
-  const logSource = entry.source;
-  const operatorVersion = val(raw["OperatorVersion"]);
-
-  const pipelineSource = val(raw["dt.openpipeline.source"]);
-  const pipelines = valArray(raw["dt.openpipeline.pipelines"]);
-  const authOrigin = val(raw["dt.auth.origin"]) ?? val(raw["dt.auth_origin"]);
-
-  const envVal = val(raw["dt.environment.id"]) ?? val(raw["environment"]);
+  const hostName = pick("host.name", "dt.entity.host")(raw, entry);
+  const processName = pick("dt.process.name", "dt.process_group.detected_name")(raw, entry);
+  const envVal = pick("dt.environment.id", "environment")(raw, entry);
 
   const traceId = entry.traceId;
-  const spanId = val(raw["span_id"]);
-  const traceUrl = traceId && baseUrl ? buildTraceUrl(baseUrl, traceId) : undefined;
-
-  // Topology: entity refs
-  const sourceEntities = valArray(raw["dt.source_entity"]);
-  const entityCustomDevice = val(raw["dt.entity.custom_device"]);
-  const entityAwsLambda = val(raw["dt.entity.aws_lambda_function"]);
-  const entityHost = val(raw["dt.entity.host"]);
-  const entityProcess = val(raw["dt.entity.process_group_instance"]);
+  const traceUrl = traceLink(tenant, traceId);
 
   const dqlFilter = buildLogContextQuery(raw);
 
-  // ── Section visibility ────────────────────────────────────────────────────────
-
-  const hasTopology = !!(sourceEntities || entityCustomDevice || entityAwsLambda || entityHost || entityProcess);
-  const hasCloud = !!(awsRegion || awsAz || awsAccount || awsArn || cloudProvider || faasId || faasName || faasVersion);
-  const hasK8s = !!(k8sCluster || k8sNamespace || k8sNode || k8sPodUid);
-  const hasInfra = !!(hostName || hostGroup || hasCloud || hasK8s);
-  const hasProcess = !!(processName || processTech || logSource || operatorVersion || appName || appVersion);
-  const hasPipeline = !!(pipelineSource || pipelines || authOrigin);
-  const hasTelemetry = !!(traceId || spanId);
-
-  // ── Markdown sections ─────────────────────────────────────────────────────────
-
-  const formatted = formatLogContent(entry.content) ?? "_No content available_";
-
-  const sections: string[] = [formatted];
-
-  // Topology section
-  if (hasTopology) {
-    const topologyTable = keyValueTable([
-      ["dt.source_entity", sourceEntities],
-      ["dt.entity.host", entityHost],
-      ["dt.entity.process_group_instance", entityProcess],
-      ["dt.entity.custom_device", entityCustomDevice],
-      ["dt.entity.aws_lambda_function", entityAwsLambda],
-    ]);
-    if (topologyTable) {
-      sections.push("### Topology", topologyTable);
-    }
-  }
-
-  // Fields section — Infrastructure, Cloud, K8s, Process, Pipeline, Telemetry
-  const fieldRows: Array<[string, string | undefined]> = [];
-
-  if (hasInfra) {
-    if (hostName) fieldRows.push(["host.name", hostName]);
-    if (hostGroup) fieldRows.push(["dt.host_group.id", hostGroup]);
-    if (cloudProvider) fieldRows.push(["cloud.provider", cloudProvider]);
-    if (awsRegion) fieldRows.push(["cloud.region", awsRegion]);
-    if (awsAz) fieldRows.push(["aws.availability_zone", awsAz]);
-    if (awsAccount) fieldRows.push(["cloud.account.id", awsAccount]);
-    if (awsArn) fieldRows.push(["aws.arn", awsArn]);
-  }
-
-  if (faasName || faasId || faasVersion) {
-    if (faasName) fieldRows.push(["faas.name", faasName]);
-    if (faasVersion) fieldRows.push(["faas.version", faasVersion]);
-    if (faasId) fieldRows.push(["faas.id", faasId]);
-  }
-
-  if (hasK8s) {
-    if (k8sCluster) fieldRows.push(["k8s.cluster.name", k8sCluster]);
-    if (k8sNamespace) fieldRows.push(["k8s.namespace.name", k8sNamespace]);
-    if (k8sNode) fieldRows.push(["k8s.node.name", k8sNode]);
-    if (k8sPodUid) fieldRows.push(["k8s.pod.uid", k8sPodUid]);
-  }
-
-  if (hasProcess) {
-    if (appName) fieldRows.push(["dt.app.name", appName]);
-    if (appVersion) fieldRows.push(["dt.app.version", appVersion]);
-    if (processName) fieldRows.push(["dt.process.name", processName]);
-    if (processTech) fieldRows.push(["process.technology", processTech]);
-    if (logSource) fieldRows.push(["log.source", logSource]);
-    if (operatorVersion) fieldRows.push(["OperatorVersion", operatorVersion]);
-  }
-
-  if (hasPipeline) {
-    if (pipelineSource) fieldRows.push(["dt.openpipeline.source", pipelineSource]);
-    if (pipelines) fieldRows.push(["dt.openpipeline.pipelines", pipelines]);
-    if (authOrigin) fieldRows.push(["dt.auth.origin", authOrigin]);
-  }
-
-  if (hasTelemetry) {
-    if (traceId) fieldRows.push(["trace_id", traceId]);
-    if (spanId) fieldRows.push(["span_id", spanId]);
-  }
-
-  if (eventType) fieldRows.push(["event.type", eventType]);
-  if (envVal) fieldRows.push(["dt.environment.id", envVal]);
-
-  const fieldsTable = keyValueTable(fieldRows);
-  if (fieldsTable) {
-    sections.push("### Fields", fieldsTable);
-  }
-
-  // DQL filter
-  sections.push("### DQL Filter *(⌘D to copy)*", fenceCode(dqlFilter));
-
-  // Raw JSON at the bottom
-  sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
-
-  const markdown = sections.join("\n\n");
-
   return (
     <Detail
-      navigationTitle={`${serviceName ?? appName ?? processName ?? "Log"} — ${loglevel}`}
-      markdown={markdown}
+      navigationTitle={`${serviceName ?? appName ?? processName ?? "Log"} — ${entry.level}`}
+      markdown={buildMarkdown(entry, raw, dqlFilter)}
       actions={
         <ActionPanel>
           {traceId && (
@@ -274,10 +241,10 @@ export default function LogDetail({
           {/* ── Core: Status / Level / Time ───────────────────────────────── */}
           {status && (
             <Detail.Metadata.TagList title="Status">
-              <Detail.Metadata.TagList.Item text={status} color={levelColor(loglevel, status)} />
+              <Detail.Metadata.TagList.Item text={status} color={levelColor(entry.level, status)} />
             </Detail.Metadata.TagList>
           )}
-          <Detail.Metadata.Label title="Level" text={loglevel} />
+          <Detail.Metadata.Label title="Level" text={entry.level} />
           <Detail.Metadata.Label title="Timestamp" text={new Date(entry.timestamp).toLocaleString()} />
 
           {/* ── Service / Process ─────────────────────────────────────────── */}
