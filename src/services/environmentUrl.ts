@@ -2,7 +2,10 @@
 
 /** Trims and strips a trailing slash so endpoints concatenate predictably. */
 export function normalizeUrl(url: string): string {
-  return url.trim().replace(/\/+$/, "");
+  const s = url.trim();
+  let end = s.length;
+  while (end > 0 && s[end - 1] === "/") end--;
+  return s.slice(0, end);
 }
 
 /** Dynatrace SaaS hosts: production, and the dev/sprint stages on dynatracelabs.com. */

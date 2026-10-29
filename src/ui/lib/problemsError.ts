@@ -51,11 +51,22 @@ const AFTER_SCOPE_RULES: ProblemsErrorRule[] = [
   { pattern: /timeout|not responding|did not finish/i, kind: "transient", summary: "Dynatrace is not responding" },
 ];
 
+/** Text inside the first "(…)" that contains a colon (a scope list), as /\(([^)]*:[^)]*)\)/ captured. */
+function scopeListIn(detail: string): string | undefined {
+  const segments = detail.split(")");
+  segments.pop(); // text after the last ")" is never closed
+  for (const segment of segments) {
+    const open = segment.indexOf("(");
+    if (open !== -1 && segment.includes(":", open)) return segment.slice(open + 1);
+  }
+  return undefined;
+}
+
 export function classifyProblemsError(err: unknown): ProblemsErrorInfo {
   const detail = err instanceof Error ? err.message : String(err);
 
   if (/missing required scopes|access denied/i.test(detail)) {
-    const scopes = detail.match(/\(([^)]*:[^)]*)\)/)?.[1];
+    const scopes = scopeListIn(detail);
     return {
       kind: "config",
       summary: scopes ? `Missing scope: ${scopes}` : "Missing scope",

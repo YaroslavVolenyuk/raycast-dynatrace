@@ -48,3 +48,39 @@ describe("classifyProblemsError — unreadable records", () => {
     expect(r.summary).toContain("Unexpected data");
   });
 });
+
+describe("classifyProblemsError — scope list extraction", () => {
+  const summary = (msg: string) => classifyProblemsError(new Error(msg)).summary;
+
+  it("takes the first parenthesised group containing a colon", () => {
+    expect(summary("missing required scopes (storage:buckets:read, storage:events:read). x")).toBe(
+      "Missing scope: storage:buckets:read, storage:events:read",
+    );
+  });
+
+  it("skips groups without a colon", () => {
+    expect(summary("access denied (no colon) then (a:b)")).toBe("Missing scope: a:b");
+    expect(summary("access denied (nothing here)")).toBe("Missing scope");
+  });
+
+  it("keeps the inner text of nested openings", () => {
+    expect(summary("access denied a (b (c:d)")).toBe("Missing scope: b (c:d");
+  });
+
+  it("ignores unclosed groups", () => {
+    expect(summary("access denied (a:b")).toBe("Missing scope");
+  });
+
+  it("handles odd parenthesis sequences", () => {
+    expect(summary("access denied )(:)")).toBe("Missing scope: :");
+    expect(summary("access denied ()")).toBe("Missing scope");
+    expect(summary("access denied (a:b) (c:d)")).toBe("Missing scope: a:b");
+  });
+
+  it("stays linear on repeated open-colon input", () => {
+    const msg = "access denied " + "(:".repeat(20000);
+    const start = performance.now();
+    expect(summary(msg)).toBe("Missing scope");
+    expect(performance.now() - start).toBeLessThan(200);
+  });
+});
