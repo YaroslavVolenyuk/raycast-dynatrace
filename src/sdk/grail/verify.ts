@@ -4,11 +4,15 @@
 // `query:verify` (parses a DQL query without running it: free, no data read).
 
 import { getAccessToken, validateTenantCredentials, type TenantConfig } from "../auth";
+import { parseErrorBody } from "./http";
 import { environmentNetworkError, isNetworkError } from "./network";
 
 export type ConnectionTestResult =
-  /** `accessDenied`: the environment answered, but refused the request (403) — a scope is missing. */
-  { valid: true; accessDenied?: boolean } | { valid: false; error: string };
+  /**
+   * `accessDenied`: the environment answered, but refused the request (403).
+   * `detail`: the reason from the 403 body, when it has one.
+   */
+  { valid: true; accessDenied?: boolean; detail?: string } | { valid: false; error: string };
 
 const VERIFY_TIMEOUT_MS = 15_000;
 
@@ -53,8 +57,8 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
   if (response.status === 401) {
     return { valid: false, error: rejectedTokenMessage(tenant) };
   }
-  // 403 = reachable and token accepted, but a scope is missing. Reported as such,
-  // not as success: the scopes listed in the tenant may not match the real ones.
+  // 403 = reachable and token accepted, but refused (missing scope, no IAM
+  // permission, token from another environment). Reported as such, not as success.
   const looksLikePlatform = !body.trimStart().startsWith("<") && response.status !== 404;
   if (!looksLikePlatform) {
     return {
@@ -62,5 +66,7 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
       error: `This does not look like a Dynatrace platform environment (HTTP ${response.status}). Expected https://<environment-id>.apps.dynatrace.com`,
     };
   }
-  return response.status === 403 ? { valid: true, accessDenied: true } : { valid: true };
+  if (response.status !== 403) return { valid: true };
+  const detail = parseErrorBody(body)?.message;
+  return detail ? { valid: true, accessDenied: true, detail } : { valid: true, accessDenied: true };
 }

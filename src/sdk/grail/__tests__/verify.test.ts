@@ -67,6 +67,15 @@ it("reports a 403 as reachable but access denied, not as a plain success", async
   expect(await testTenantConnection(TENANT)).toEqual({ valid: true, accessDenied: true });
 });
 
+it("passes the reason from the 403 body along", async () => {
+  mockFetch.mockResolvedValueOnce(respond(403, '{"error":{"code":403,"message":"Missing scope storage:logs:read"}}'));
+  expect(await testTenantConnection(TENANT)).toEqual({
+    valid: true,
+    accessDenied: true,
+    detail: "Missing scope storage:logs:read",
+  });
+});
+
 it("names the platform token when the environment rejects it", async () => {
   mockFetch.mockResolvedValueOnce(respond(401, ""));
   const result = await testTenantConnection({ ...TENANT, platformToken: "dt0s16.X" });

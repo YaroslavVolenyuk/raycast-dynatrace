@@ -218,6 +218,16 @@ describe("platform-token tenants in the form", () => {
     const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES, ...OPTIONAL_SCOPES] }, { accessDenied: true });
     expect(r).toMatchObject({ style: "failure", title: "Connected, but access denied" });
   });
+
+  it("shows the reason from the 403 body when there is one", () => {
+    const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES] }, { accessDenied: true, detail: "Forbidden" });
+    expect(r.message).toContain("Forbidden");
+  });
+
+  it("does not double the full stop of a 403 reason", () => {
+    const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES] }, { accessDenied: true, detail: "Denied." });
+    expect(r.message).toMatch(/^Denied\. The /);
+  });
 });
 
 describe("ssoEndpointOverride (SSO field when editing)", () => {

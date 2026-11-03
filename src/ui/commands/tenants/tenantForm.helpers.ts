@@ -44,16 +44,18 @@ export interface ScopeCheckToast {
  */
 export function describeScopeCheck(
   tenant: Pick<TenantConfig, "scopes" | "platformToken">,
-  test: { accessDenied?: boolean } = {},
+  test: { accessDenied?: boolean; detail?: string } = {},
 ): ScopeCheckToast {
   const kind = credentialsKind(tenant);
   // The environment refused the test query: whatever the tenant lists, the real
-  // token lacks a scope. Never report this as verified.
+  // token is not enough. Never report this as verified.
   if (test.accessDenied) {
     return {
       style: "failure",
       title: "Connected, but access denied",
-      message: `The ${kind} lacks a scope. It needs at least ${REQUIRED_SCOPES.join(", ")}`,
+      message: test.detail
+        ? `${test.detail.endsWith(".") ? test.detail.slice(0, -1) : test.detail}. The ${kind} needs at least ${REQUIRED_SCOPES.join(", ")}, and must belong to this environment`
+        : `The ${kind} lacks a scope or was created for another environment. It needs at least ${REQUIRED_SCOPES.join(", ")}`,
     };
   }
   const missingRequired = findMissingScopes(tenant, REQUIRED_SCOPES);
