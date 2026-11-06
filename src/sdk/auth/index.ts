@@ -88,15 +88,38 @@ function describeOAuthBody(body: string): string | null {
 // ── Error class ───────────────────────────────────────────────────────────────
 
 export class OAuthError extends Error {
+  /** The response body with any `client_secret=…` redacted; this is what reaches the UI. */
+  public body: string;
+
   constructor(
     public statusCode: number,
-    public body: string,
+    body: string,
   ) {
-    // Redact client_secret if it somehow appears in the error body
-    const safeBody = body.replace(/client_secret=[^&\s]+/g, "client_secret=[REDACTED]");
+    // An SSO (or a proxy in front of it) may echo the form body back in its error.
+    const safeBody = body.replace(/client_secret=[^&\s"']+/g, "client_secret=[REDACTED]");
     super(`OAuth error ${statusCode}: ${safeBody}`);
     this.name = "OAuthError";
+    this.body = safeBody;
   }
+}
+
+/**
+ * Removes the secret itself from a response body, raw and URL-encoded, wherever
+ * it appears (JSON error_description, decoded echoes, …). OAuthError only knows
+ * the `client_secret=` pattern; this catches the value without its key.
+ */
+function redactSecret(text: string, secret: string): string {
+  if (!secret) return text;
+  const forms = new Set([secret, encodeURIComponent(secret), new URLSearchParams({ s: secret }).toString().slice(2)]);
+  let out = text;
+  for (const form of forms) out = out.split(form).join("[REDACTED]");
+  return out;
+}
+
+/** True for the TypeError fetch throws when `redirect: "error"` meets a 3xx. */
+function isRedirectRefusal(err: unknown): boolean {
+  const cause = (err as { cause?: { message?: unknown } } | undefined)?.cause;
+  return err instanceof TypeError && typeof cause?.message === "string" && /redirect/i.test(cause.message);
 }
 
 // ── In-memory cache (tokens never written to disk) ────────────────────────────
@@ -147,11 +170,20 @@ async function requestToken(tenant: TenantConfig): Promise<Response> {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString(),
       signal: ssoTimeout.signal,
+      // Never follow a redirect: on 307/308 fetch re-sends the whole body, client
+      // secret included, to whatever host the Location header names.
+      redirect: "error",
     });
   } catch (fetchErr) {
     clearTimeout(ssoTimer);
     if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
       throw new OAuthError(0, "SSO endpoint is not responding (15s timeout)");
+    }
+    if (isRedirectRefusal(fetchErr)) {
+      throw new OAuthError(
+        0,
+        "SSO endpoint answered with a redirect, which is not followed so the client secret cannot be forwarded — enter the final token URL",
+      );
     }
     throw fetchErr;
   } finally {
@@ -177,7 +209,7 @@ export async function getAccessToken(tenant: TenantConfig): Promise<string> {
 
   const res = await requestToken(tenant);
 
-  const body = await res.text();
+  const body = redactSecret(await res.text(), tenant.clientSecret);
 
   if (!res.ok) {
     throw new OAuthError(res.status, body);

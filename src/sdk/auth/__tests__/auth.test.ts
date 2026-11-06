@@ -117,6 +117,32 @@ describe("OAuthError — secret redaction", () => {
     expect(err.message).toMatch(/\[REDACTED\].*\[REDACTED\]/);
   });
 
+  it("redacts the body that the UI message is built from", async () => {
+    const { OAuthError } = await loadAuth();
+    const err = new OAuthError(400, "client_secret=super-secret&grant_type=client_credentials");
+    expect(err.body).not.toContain("super-secret");
+  });
+
+  it("keeps an echoed secret out of the connection-test message", async () => {
+    // An SSO or proxy error page that echoes the (decoded) request back.
+    mockErrorResponse(400, `Bad request: client_id=x client_secret=${TENANT.clientSecret} scope=a`);
+    const { validateTenantCredentials } = await loadAuth();
+    const result = await validateTenantCredentials(TENANT);
+    expect(result.valid).toBe(false);
+    expect(result.valid === false && result.error).not.toContain(TENANT.clientSecret);
+  });
+
+  it("keeps a secret quoted without its key out of the message", async () => {
+    mockErrorResponse(
+      400,
+      JSON.stringify({ error: "invalid_client", error_description: `bad: ${TENANT.clientSecret}` }),
+    );
+    const { validateTenantCredentials } = await loadAuth();
+    const result = await validateTenantCredentials(TENANT);
+    expect(result.valid === false && result.error).not.toContain(TENANT.clientSecret);
+    expect(result.valid === false && result.error).toContain("invalid_client");
+  });
+
   it("preserves non-secret information", async () => {
     const { OAuthError } = await loadAuth();
     const err = new OAuthError(401, "error=invalid_client&error_description=Client+authentication+failed");
@@ -151,6 +177,24 @@ test("getAccessToken fetches a new token when credentials change under the same 
   const { getAccessToken } = await loadAuth();
   expect(await getAccessToken(TENANT)).toBe("token-a");
   expect(await getAccessToken({ ...TENANT, clientSecret: "other" })).toBe("token-b");
+});
+
+// On 307/308 fetch would re-send the form body (client secret included) to the Location host.
+test("the token request never follows a redirect", async () => {
+  mockTokenResponse();
+  const { getAccessToken } = await loadAuth();
+  await getAccessToken(TENANT);
+  expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: "error" });
+});
+
+test("validateTenantCredentials explains a refused SSO redirect", async () => {
+  mockFetch.mockRejectedValueOnce(
+    Object.assign(new TypeError("fetch failed"), { cause: new Error("unexpected redirect") }),
+  );
+  const { validateTenantCredentials } = await loadAuth();
+  const result = await validateTenantCredentials(TENANT);
+  expect(result.valid === false && result.error).toMatch(/redirect/);
+  expect(result.valid === false && result.error).not.toMatch(/Cannot reach/);
 });
 
 // A wrong "SSO endpoint" pointing at a Dynatrace API answers { error: { code, message } }.
