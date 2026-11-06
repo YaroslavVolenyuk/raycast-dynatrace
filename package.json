@@ -1,9 +1,9 @@
 {
   "$schema": "https://www.raycast.com/schemas/extension.json",
-  "name": "dynatrace",
-  "title": "Dynatrace",
+  "name": "connector-for-dynatrace",
+  "title": "Connector for Dynatrace",
   "description": "Run DQL, search logs and traces, and watch open Davis problems in the menu bar — across multiple Dynatrace tenants.",
-  "icon": "dynatrace-icon.png",
+  "icon": "icon.png",
   "author": "yaroslav_volenyuk",
   "platforms": [
     "macOS"
@@ -96,7 +96,7 @@
       "subtitle": "Dynatrace",
       "description": "Add, edit, test, and switch between Dynatrace tenants, each with a platform token or an OAuth client",
       "mode": "view",
-      "icon": "dynatrace-icon.png"
+      "icon": "icon.png"
     },
     {
       "name": "dt-search-logs",
@@ -104,7 +104,7 @@
       "subtitle": "Dynatrace",
       "description": "Search Dynatrace Grail logs with DQL filters",
       "mode": "view",
-      "icon": "dynatrace-icon.png",
+      "icon": "icon.png",
       "arguments": [
         {
           "name": "timeframe",
@@ -202,7 +202,7 @@
       "subtitle": "Dynatrace",
       "description": "Search distributed traces and spans in Dynatrace Grail",
       "mode": "view",
-      "icon": "dynatrace-icon.png",
+      "icon": "icon.png",
       "arguments": [
         {
           "name": "timeframe",
@@ -254,7 +254,7 @@
       "subtitle": "Dynatrace",
       "description": "Run any DQL query against Grail and browse, filter and copy the results",
       "mode": "view",
-      "icon": "dynatrace-icon.png"
+      "icon": "icon.png"
     },
     {
       "name": "dt-menubar-problems",
@@ -262,7 +262,7 @@
       "subtitle": "Dynatrace",
       "description": "Show the number of open Dynatrace problems in the macOS menu bar",
       "mode": "menu-bar",
-      "icon": "dynatrace-icon.png",
+      "icon": "icon.png",
       "interval": "15m",
       "platforms": [
         "macOS"
@@ -274,7 +274,7 @@
       "subtitle": "Dynatrace",
       "description": "Fetch open Dynatrace problems now and update Problems in Menu Bar",
       "mode": "no-view",
-      "icon": "dynatrace-icon.png",
+      "icon": "icon.png",
       "platforms": [
         "macOS"
       ]

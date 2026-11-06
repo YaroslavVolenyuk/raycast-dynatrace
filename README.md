@@ -1,4 +1,4 @@
-# Dynatrace
+# Connector for Dynatrace
 
 Run DQL, search logs and traces, and watch open Davis problems in the menu
 bar — across multiple Dynatrace tenants, without leaving your keyboard.

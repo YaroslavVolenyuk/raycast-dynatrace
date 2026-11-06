@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving the Dynatrace Connector for Raycast.
+Thanks for your interest in improving the Connector for Dynatrace (Raycast extension).
 This document describes how to set up your environment, the quality bar a change
 must clear, and how to submit it.
 

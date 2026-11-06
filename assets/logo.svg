@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="80 0 864 860" width="1024" height="1019">
+  <defs>
+    <linearGradient id="purple" x1="300" y1="400" x2="780" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5E2A8C"/>
+      <stop offset="0.5" stop-color="#6E2F9F"/>
+      <stop offset="1" stop-color="#A06FC8"/>
+    </linearGradient>
+    <linearGradient id="green" x1="520" y1="200" x2="900" y2="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#5A9A28"/>
+      <stop offset="0.55" stop-color="#6DB32E"/>
+      <stop offset="1" stop-color="#97CF5C"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="330" y1="780" x2="720" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4FACFF"/>
+      <stop offset="0.5" stop-color="#1A93FF"/>
+      <stop offset="1" stop-color="#1479D6"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="150" y1="300" x2="500" y2="660" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7FDBFF"/>
+      <stop offset="0.45" stop-color="#00C8FF"/>
+      <stop offset="1" stop-color="#0AA5CF"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0.28"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Blue (bottom) -->
+  <path fill="url(#blue)" d="M697 432 C715 445 730 465 740 495 C765 560 760 640 722 705 L660 770 C620 810 565 830 512 830 C450 830 400 805 360 765 L232 640 C280 670 340 685 400 678 C450 672 490 645 512 618 Z"/>
+  <!-- Green (right) -->
+  <path fill="url(#green)" d="M515 243 C565 198 625 182 690 182 C735 182 770 205 792 224 L850 282 C895 330 912 380 912 435 C912 490 890 535 855 572 L722 705 C760 640 765 560 740 495 C730 465 715 445 697 432 Z"/>
+  <!-- Cyan (left) -->
+  <path fill="url(#cyan)" d="M325 430 L512 618 C490 645 450 672 400 678 C340 685 280 670 232 640 L165 575 C128 535 112 490 112 435 C112 385 130 335 170 290 L300 152 L330 220 L305 360 L325 430 Z"/>
+
+  <!-- Purple (top) -->
+  <path fill="url(#purple)" d="M325 430 L515 243 C565 198 625 182 690 182 C735 182 770 205 792 224 L660 92 C620 50 565 30 512 30 C450 30 400 55 360 95 L300 152 C265 200 255 270 275 350 C285 390 300 412 325 430 Z"/>
+  <!-- Soft overlap shadows -->
+  <path fill="url(#shade)" opacity="0.5" d="M512 618 C490 645 450 672 400 678 C340 685 280 670 232 640 C300 690 420 700 512 618 Z"/>
+  <path fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="2.5" d="M300 152 C255 200 255 270 275 350 C285 390 300 412 325 430"/>
+  <path fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="2.5" d="M722 705 C760 640 765 560 740 495 C730 465 715 445 697 432"/>
+</svg>
