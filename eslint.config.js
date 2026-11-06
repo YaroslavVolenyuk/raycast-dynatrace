@@ -1,5 +1,7 @@
 const { defineConfig } = require("eslint/config");
 const raycastConfig = require("@raycast/eslint-config");
+const sonarjs = require("eslint-plugin-sonarjs");
+const security = require("eslint-plugin-security");
 
 // Layered architecture boundary (Phase 0).
 // The SDK layer (src/sdk) must stay a standalone TypeScript client:
@@ -61,4 +63,19 @@ const servicesBoundary = {
   },
 };
 
-module.exports = defineConfig([...raycastConfig, sdkBoundary, servicesBoundary]);
+// Static-analysis rules (code quality + security), kept free and local.
+// Tests are excluded: fixtures legitimately use dynamic keys, regexes and
+// duplicated literals that these rules would flag as noise.
+const staticAnalysis = {
+  files: ["src/**/*.{ts,tsx}"],
+  ignores: ["src/**/__tests__/**", "src/**/__mocks__/**", "src/**/__fixtures__/**"],
+  ...sonarjs.configs.recommended,
+};
+
+const securityRules = {
+  files: ["src/**/*.{ts,tsx}"],
+  ignores: ["src/**/__tests__/**", "src/**/__mocks__/**", "src/**/__fixtures__/**"],
+  ...security.configs.recommended,
+};
+
+module.exports = defineConfig([...raycastConfig, staticAnalysis, securityRules, sdkBoundary, servicesBoundary]);

@@ -54,7 +54,7 @@ export function describeScopeCheck(
       style: "failure",
       title: "Connected, but access denied",
       message: test.detail
-        ? `${test.detail.endsWith(".") ? test.detail.slice(0, -1) : test.detail}. The ${kind} needs at least ${REQUIRED_SCOPES.join(", ")}, and must belong to this environment`
+        ? `${stripTrailingPeriod(test.detail)}. The ${kind} needs at least ${REQUIRED_SCOPES.join(", ")}, and must belong to this environment`
         : `The ${kind} lacks a scope or was created for another environment. It needs at least ${REQUIRED_SCOPES.join(", ")}`,
     };
   }
@@ -214,10 +214,11 @@ export function ssoEndpointOverride(tenant: Pick<TenantConfig, "tenantEndpoint" 
   return tenant.ssoEndpoint === ssoEndpointFor(tenant.tenantEndpoint) ? "" : tenant.ssoEndpoint;
 }
 
+function stripTrailingPeriod(text: string): string {
+  return text.endsWith(".") ? text.slice(0, -1) : text;
+}
+
 function generateTenantId(): string {
-  // Node 22 (Raycast runtime) exposes globalThis.crypto.randomUUID.
-  if (typeof globalThis.crypto?.randomUUID === "function") {
-    return globalThis.crypto.randomUUID();
-  }
-  return `tenant_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  // Node 22 (Raycast runtime) always exposes globalThis.crypto.randomUUID.
+  return globalThis.crypto.randomUUID();
 }

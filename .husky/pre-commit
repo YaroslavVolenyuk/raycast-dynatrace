@@ -1,0 +1,15 @@
+# Fast local gate; the same checks (plus more) run again in CI.
+set -e
+
+# 1. Lint + format only the staged files.
+npx lint-staged
+
+# 2. Types (whole project: a staged change can break an unstaged file).
+npm run typecheck
+
+# 3. Secrets in the staged diff. gitleaks is a separate binary (brew install gitleaks).
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks protect --staged --redact --config .gitleaks.toml
+else
+  echo "warning: gitleaks not installed, skipping local secret scan (CI still runs it). Install: brew install gitleaks" >&2
+fi
