@@ -1,16 +1,14 @@
 # Requires a public repository (or GitHub Advanced Security on a private one).
-# Dormant until then: runs only manually, so it can't fail CI while the repo is private.
-# When the repo goes public, uncomment the triggers below.
 name: CodeQL
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [main]
-  # pull_request:
-  #   branches: [main]
-  # schedule:
-  #   - cron: "0 5 * * 1"
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * 1"
 
 jobs:
   analyze:
