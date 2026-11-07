@@ -8,6 +8,17 @@ subscription needed.
 This is an independent, community-built extension. It is not an official
 Dynatrace product and is not affiliated with or endorsed by Dynatrace LLC.
 
+## Screenshots
+
+| | |
+| --- | --- |
+| ![Dynatrace commands in the Raycast root search](metadata/01-commands-overview.png) | ![Search Logs list with level icons](metadata/02-search-logs-list.png) |
+| Commands in the Raycast root search | Search Logs: results list with level icons |
+| ![Log detail with topology and infrastructure fields](metadata/03-log-detail.png) | ![Run DQL record detail](metadata/04-run-dql-record.png) |
+| Log detail: topology, infrastructure and metadata | Run DQL: record detail with Copy as JSON |
+| ![Search Traces list with span status](metadata/05-search-traces-list.png) | ![Span detail with raw fields](metadata/06-trace-span-detail.png) |
+| Search Traces: spans list with status | Span detail: IDs, timing and raw fields |
+
 ## Commands
 
 ### Manage Tenants
