@@ -1,10 +1,20 @@
 import { usePromise } from "@raycast/utils";
 import { useRef } from "react";
-import type { TenantConfig } from "../../sdk/auth";
+import { credentialsFingerprint, type TenantConfig } from "../../sdk/auth";
 
 /**
- * Runs `query` against the active tenant whenever `args` or the tenant change,
- * aborting the request it replaces. Nothing runs until a tenant is loaded.
+ * Which tenant, and which configuration of it, a result was fetched for. Editing
+ * a tenant keeps its id, so the id alone would keep environment A's records on
+ * screen after its URL was changed to B. The credentials enter only as a hash.
+ */
+export function tenantQueryKey(tenant: TenantConfig | null): string {
+  return tenant ? JSON.stringify([tenant.id, tenant.tenantEndpoint, credentialsFingerprint(tenant)]) : "";
+}
+
+/**
+ * Runs `query` against the active tenant whenever `args` or the tenant (or its
+ * configuration) change, aborting the request it replaces. Nothing runs until a
+ * tenant is loaded.
  */
 export function useTenantQuery<A extends unknown[], T extends object>(
   tenant: TenantConfig | null,
@@ -12,22 +22,23 @@ export function useTenantQuery<A extends unknown[], T extends object>(
   args: A,
 ) {
   const abortable = useRef<AbortController>(null);
+  const tenantKey = tenantQueryKey(tenant);
   const {
     data: fetched,
     isLoading,
     error,
     revalidate,
   } = usePromise(
-    async (tenantId: string, ...queryArgs: A) => {
+    async (key: string, ...queryArgs: A) => {
       const page = await query(tenant!, queryArgs, abortable.current?.signal);
-      return { ...page, tenantId };
+      return { ...page, tenantKey: key };
     },
-    [tenant?.id ?? "", ...args],
+    [tenantKey, ...args],
     { execute: !!tenant, abortable },
   );
 
   // usePromise keeps the previous result while the next one loads: after a tenant
-  // switch that would list the old tenant's records under the new tenant's name.
-  const data = fetched?.tenantId === tenant?.id ? fetched : undefined;
+  // switch or edit that would list the old environment's records under the new name.
+  const data = fetched?.tenantKey === tenantKey ? fetched : undefined;
   return { data, isLoading, error, revalidate };
 }
