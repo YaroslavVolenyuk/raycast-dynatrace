@@ -59,6 +59,14 @@ describe("validateForm", () => {
 
   it("rejects a non-https environment URL", () => {
     expect(validateForm(validValues({ tenantEndpoint: "ftp://x" })).tenantEndpoint).toBeDefined();
+    expect(
+      validateForm(validValues({ tenantEndpoint: "http://abc12345.apps.dynatrace.com" })).tenantEndpoint,
+    ).toBeDefined();
+  });
+
+  // The client secret is posted to this URL: never in plain text.
+  it("rejects a plain-http SSO endpoint", () => {
+    expect(validateForm(validValues({ ssoEndpoint: "http://sso.example.com/token" })).ssoEndpoint).toBeDefined();
   });
 
   it("requires at least one scope", () => {

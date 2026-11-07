@@ -19,6 +19,12 @@ We aim to acknowledge reports within **5 business days** and to provide a
 remediation timeline after triage. Please give us a reasonable window to release
 a fix before any public disclosure.
 
+## Threat model
+
+[THREAT_MODEL.md](THREAT_MODEL.md) lists what the extension protects, from
+whom, which control covers each threat and which test or tool checks it. Reports
+that map to a row there (or show a gap in it) are the easiest to triage.
+
 ## Supported versions
 
 This project is pre-1.0 and under active development. Only the latest released
