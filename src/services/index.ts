@@ -4,14 +4,5 @@
  * No fetch, no JSX. Composes SDK calls into app behavior. May import src/sdk,
  * must not import src/ui. Future modules: savedQueries, export, deepLinks.
  */
-export { StorageKeys } from "./storageKeys";
-export {
-  listTenants,
-  saveTenant,
-  deleteTenant,
-  getActiveTenant,
-  setActiveTenant,
-  resetTenants,
-  readTenantState,
-} from "./tenants";
+export { listTenants, saveTenant, deleteTenant, setActiveTenant, resetTenants, readTenantState } from "./tenants";
 export { getLastDqlQuery, setLastDqlQuery, getLastDqlTimeframe, setLastDqlTimeframe } from "./dqlHistory";

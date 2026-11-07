@@ -7,8 +7,6 @@ export {
   verifyDql,
   autocompleteDql,
   applySuggestion,
-  normalizeVerification,
-  normalizeCompletion,
   type DqlIssue,
   type DqlVerification,
   type DqlSuggestion,
