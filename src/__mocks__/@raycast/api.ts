@@ -53,3 +53,29 @@ export class Cache {
 }
 
 export const environment = { isDevelopment: false, launchType: "userInitiated" };
+
+// Keyboard.Shortcut.Common with the macOS combinations (this extension is macOS-only), as listed by
+// @raycast/eslint-plugin prefer-common-shortcut. Raycast fills these in at runtime; the npm package has none.
+export const Keyboard = {
+  Shortcut: {
+    Common: {
+      Copy: { modifiers: ["cmd", "shift"], key: "c" },
+      CopyDeeplink: { modifiers: ["cmd", "shift"], key: "c" },
+      CopyName: { modifiers: ["cmd", "opt"], key: "c" },
+      CopyPath: { modifiers: ["cmd", "ctrl"], key: "c" },
+      Save: { modifiers: ["cmd"], key: "s" },
+      Duplicate: { modifiers: ["cmd", "shift"], key: "s" },
+      Edit: { modifiers: ["cmd"], key: "e" },
+      MoveDown: { modifiers: ["cmd", "shift"], key: "arrowDown" },
+      MoveUp: { modifiers: ["cmd", "shift"], key: "arrowUp" },
+      New: { modifiers: ["cmd"], key: "n" },
+      Open: { modifiers: ["cmd"], key: "o" },
+      OpenWith: { modifiers: ["cmd", "shift"], key: "o" },
+      Pin: { modifiers: ["cmd"], key: "." },
+      Refresh: { modifiers: ["cmd"], key: "r" },
+      Remove: { modifiers: ["ctrl"], key: "d" },
+      RemoveAll: { modifiers: ["ctrl", "shift"], key: "d" },
+      ToggleQuickLook: { modifiers: ["cmd"], key: "y" },
+    },
+  },
+};
