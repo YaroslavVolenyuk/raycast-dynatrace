@@ -11,6 +11,15 @@ export function normalizeUrl(url: string): string {
 /** Dynatrace SaaS hosts: production, and the dev/sprint stages on dynatracelabs.com. */
 const SAAS_HOST = /\.dynatrace(labs)?\.com$/;
 
+/** True for a URL on a Dynatrace SaaS host (`*.dynatrace.com`, `*.dynatracelabs.com`). */
+export function isDynatraceHost(url: string): boolean {
+  try {
+    return SAAS_HOST.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Environment URL as stored. A URL pasted from the browser on a Dynatrace SaaS
  * host (`…/ui/apps/dynatrace.logs?gtf=-2h`) is cut back to its origin, otherwise
@@ -20,8 +29,7 @@ const SAAS_HOST = /\.dynatrace(labs)?\.com$/;
 export function normalizeEnvironmentUrl(url: string): string {
   const trimmed = normalizeUrl(url);
   try {
-    const parsed = new URL(trimmed);
-    if (SAAS_HOST.test(parsed.hostname)) return parsed.origin;
+    if (isDynatraceHost(trimmed)) return new URL(trimmed).origin;
   } catch {
     // invalid URL — environmentUrlProblem reports it
   }

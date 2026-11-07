@@ -6,6 +6,7 @@ import type { TenantConfig } from "../../../sdk/auth";
 import { PROD_SSO_ENDPOINT, credentialsKind, findMissingScopes, ssoEndpointFor } from "../../../sdk/auth";
 import {
   environmentUrlProblem,
+  isDynatraceHost,
   isHttpsUrl,
   normalizeEnvironmentUrl,
   normalizeUrl,
@@ -212,6 +213,33 @@ export function buildTenantConfig(values: TenantFormValues, existingId?: string)
  */
 export function ssoEndpointOverride(tenant: Pick<TenantConfig, "tenantEndpoint" | "ssoEndpoint">): string {
   return tenant.ssoEndpoint === ssoEndpointFor(tenant.tenantEndpoint) ? "" : tenant.ssoEndpoint;
+}
+
+/** The URLs a tenant sends credentials to: the environment always, the SSO for an OAuth client. */
+function credentialUrls(tenant: TenantConfig): string[] {
+  return tenant.platformToken ? [tenant.tenantEndpoint] : [tenant.tenantEndpoint, tenant.ssoEndpoint];
+}
+
+function hostOf(url: string): string | undefined {
+  try {
+    return new URL(url).host;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Hosts outside Dynatrace SaaS that `config` would send credentials to and that
+ * `previous` (the tenant being edited) did not already use. A proxy or Managed
+ * server is legitimate, a lookalike URL is not: the user is asked once per new host.
+ */
+export function newForeignHosts(config: TenantConfig, previous?: TenantConfig): string[] {
+  const known = new Set(previous ? credentialUrls(previous).map(hostOf) : []);
+  const hosts = credentialUrls(config)
+    .filter((url) => !isDynatraceHost(url))
+    .map(hostOf)
+    .filter((host): host is string => !!host && !known.has(host));
+  return Array.from(new Set(hosts));
 }
 
 function stripTrailingPeriod(text: string): string {

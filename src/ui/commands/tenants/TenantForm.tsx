@@ -11,11 +11,17 @@ import {
   REQUIRED_SCOPES,
   buildTenantConfig,
   initialFormValues,
+  newForeignHosts,
   validateForm,
   type AuthType,
   type TenantFormValues,
 } from "./tenantForm.helpers";
-import { confirmAndDeleteTenant, saveTenantAndActivateFirst, verifyTenantConnection } from "./tenantActions";
+import {
+  confirmAndDeleteTenant,
+  confirmForeignHosts,
+  saveTenantAndActivateFirst,
+  verifyTenantConnection,
+} from "./tenantActions";
 
 interface TenantFormProps {
   /** Existing tenant to edit. Omit to create a new one. */
@@ -55,6 +61,9 @@ export default function TenantForm({ tenant, onSaved }: TenantFormProps) {
     setFieldErrors({});
 
     const config = buildTenantConfig(values, tenant?.id);
+    // Before anything is sent: a test would already hand the credentials to the host.
+    const foreignHosts = newForeignHosts(config, tenant);
+    if (foreignHosts.length > 0 && !(await confirmForeignHosts(config, foreignHosts))) return;
     setIsSaving(true);
     try {
       if (test && !(await verifyTenantConnection(config))) return;

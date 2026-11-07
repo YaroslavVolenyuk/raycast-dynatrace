@@ -3,7 +3,7 @@
 // flow reads as one call.
 
 import { Alert, Icon, Toast, confirmAlert, showToast } from "@raycast/api";
-import type { TenantConfig } from "../../../sdk/auth";
+import { credentialsKind, type TenantConfig } from "../../../sdk/auth";
 import { testTenantConnection } from "../../../sdk";
 import { deleteTenant, listTenants, saveTenant, setActiveTenant } from "../../../services";
 import { describeScopeCheck } from "./tenantForm.helpers";
@@ -20,6 +20,21 @@ export async function confirmAndDeleteTenant(tenant: TenantConfig): Promise<bool
   await deleteTenant(tenant.id);
   await showToast({ style: Toast.Style.Success, title: "Tenant deleted", message: tenant.name });
   return true;
+}
+
+/**
+ * Asks before credentials go to a host that is not Dynatrace SaaS (see
+ * newForeignHosts). Resolves to false when the user cancels.
+ */
+export async function confirmForeignHosts(config: TenantConfig, hosts: string[]): Promise<boolean> {
+  return confirmAlert({
+    title: "Not a Dynatrace Host",
+    message:
+      `The ${credentialsKind(config)} will be sent to ${hosts.join(" and ")}. ` +
+      "Continue only if this is your own proxy or Dynatrace Managed server: a lookalike address would receive your credentials.",
+    icon: Icon.ExclamationMark,
+    primaryAction: { title: "Send Credentials", style: Alert.ActionStyle.Destructive },
+  });
 }
 
 /**

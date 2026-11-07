@@ -1,6 +1,22 @@
 // Pins normalizeUrl behaviour (trim + strip trailing slashes) and its linear-time guarantee.
 
-import { normalizeUrl } from "../environmentUrl";
+import { isDynatraceHost, normalizeUrl } from "../environmentUrl";
+
+describe("isDynatraceHost", () => {
+  it.each([
+    ["https://abc12345.apps.dynatrace.com", true],
+    ["https://abc.dev.apps.dynatracelabs.com/ui", true],
+    ["https://sso.dynatrace.com/sso/oauth2/token", true],
+    // lookalikes
+    ["https://abc12345.apps.dynatrace.com.attacker.example", false],
+    ["https://abc12345-apps-dynatrace.com", false],
+    ["https://dynatrace.com@attacker.example", false],
+    ["https://proxy.corp.example", false],
+    ["not a url", false],
+  ])("%s → %s", (url, expected) => {
+    expect(isDynatraceHost(url)).toBe(expected);
+  });
+});
 
 describe("normalizeUrl", () => {
   it.each([

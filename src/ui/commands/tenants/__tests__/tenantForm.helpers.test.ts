@@ -8,6 +8,7 @@ import {
   describeScopeCheck,
   ssoEndpointOverride,
   initialFormValues,
+  newForeignHosts,
   type TenantFormValues,
 } from "../tenantForm.helpers";
 import { normalizeUrl } from "../../../../services/environmentUrl";
@@ -351,5 +352,32 @@ describe("initialFormValues", () => {
       scopes: [...REQUIRED_SCOPES],
     };
     expect(initialFormValues(tenant)).toMatchObject({ authType: "token", platformToken: "dt0s16.A.B" });
+  });
+});
+
+describe("newForeignHosts", () => {
+  const saas = buildTenantConfig(validValues());
+  const token = (url: string) =>
+    buildTenantConfig(validValues({ authType: "token", platformToken: "dt0s16.X.Y", tenantEndpoint: url }));
+
+  it("is empty for Dynatrace SaaS URLs", () => {
+    expect(newForeignHosts(saas)).toEqual([]);
+  });
+
+  it("names a lookalike environment host", () => {
+    expect(newForeignHosts(token("https://abc12345.apps.dynatrace.com.attacker.example"))).toEqual([
+      "abc12345.apps.dynatrace.com.attacker.example",
+    ]);
+  });
+
+  it("names a custom SSO endpoint of an OAuth client", () => {
+    const cfg = buildTenantConfig(validValues({ ssoEndpoint: "https://sso.corp.example/token" }));
+    expect(newForeignHosts(cfg)).toEqual(["sso.corp.example"]);
+  });
+
+  it("does not ask again for a host the edited tenant already used", () => {
+    const proxy = token("https://dt-proxy.corp.example");
+    expect(newForeignHosts({ ...proxy, name: "Renamed" }, proxy)).toEqual([]);
+    expect(newForeignHosts(token("https://other.corp.example"), proxy)).toEqual(["other.corp.example"]);
   });
 });
