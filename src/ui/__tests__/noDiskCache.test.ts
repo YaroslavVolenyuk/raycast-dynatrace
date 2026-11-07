@@ -35,8 +35,10 @@ describe("no on-disk cache for sensitive data", () => {
     );
   });
 
-  it.each(files)("%s does not use the Raycast Cache", (file) => {
-    const code = readFileSync(join(SRC_ROOT, file), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "");
-    expect(code).not.toMatch(FORBIDDEN);
+  it("finds no Raycast Cache use outside the menu bar", () => {
+    const offenders = files.filter((file) =>
+      FORBIDDEN.test(readFileSync(join(SRC_ROOT, file), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, "")),
+    );
+    expect(offenders).toEqual([]);
   });
 });

@@ -1,8 +1,10 @@
 import { DQL_TEMPLATES, templateScopes } from "../templates";
 
 describe("DQL templates", () => {
-  it.each(DQL_TEMPLATES.map((t) => [t.title, t] as const))("%s names its data scope", (_title, t) => {
-    expect(templateScopes(t)).toHaveLength(2); // storage:buckets:read + the source's scope
+  it("names the data scope of every template", () => {
+    // storage:buckets:read + the source's scope
+    const withoutSource = DQL_TEMPLATES.filter((t) => templateScopes(t).length !== 2).map((t) => t.title);
+    expect(withoutSource).toEqual([]);
   });
 
   it("avoids the deprecated request.is_* span fields", () => {
