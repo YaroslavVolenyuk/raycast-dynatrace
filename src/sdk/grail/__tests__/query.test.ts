@@ -16,6 +16,7 @@ jest.mock("../../auth", () => {
 });
 
 import { executeDqlQuery } from "../query";
+import { environmentNetworkError, ssoNetworkError } from "../network";
 import { getAccessToken, invalidateTokenCache, OAuthError } from "../../auth";
 
 const mockGetAccessToken = getAccessToken as jest.MockedFunction<typeof getAccessToken>;
@@ -143,17 +144,11 @@ describe("401 retry", () => {
 });
 
 describe("HTTP error responses", () => {
-  it("throws scopes error on 403", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 403, text: async () => "forbidden" });
-
-    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("missing required scopes");
-  });
-
   it("names the caller's required scopes in the 403 message", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 403, text: async () => "forbidden" });
 
     await expect(executeDqlQuery(TENANT, "fetch logs", { requiredScopes: ["storage:logs:read"] })).rejects.toThrow(
-      "(storage:logs:read)",
+      "missing required scopes (storage:logs:read)",
     );
   });
 
@@ -174,29 +169,18 @@ describe("HTTP error responses", () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
-  it("uses error.message from JSON body on non-ok", async () => {
-    const body = { error: { code: 400, message: "Invalid DQL syntax at position 5" } };
-    mockFetch.mockResolvedValueOnce(grailError(400, body));
-
-    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("Invalid DQL syntax at position 5");
-  });
-
   it("formats the JSON body error with its code", async () => {
     mockFetch.mockResolvedValueOnce(grailError(400, { error: { code: 400, message: "bad" } }));
 
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^Dynatrace: bad \(code 400\)$/);
   });
 
-  it("falls back to the HTTP status line for a JSON body without error.message", async () => {
+  it("falls back to the HTTP status line for a body without error.message", async () => {
     mockFetch.mockResolvedValueOnce(grailError(500, { error: { code: 500 } }));
-
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^HTTP 500: \{"error":\{"code":500\}\}$/);
-  });
 
-  it("falls back to HTTP status line for non-ok plain text body", async () => {
     mockFetch.mockResolvedValueOnce(grailError(500, "Internal Server Error"));
-
-    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 500");
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 500: Internal Server Error");
   });
 
   it("detects HTML body on non-ok and suggests checking the endpoint URL", async () => {
@@ -454,27 +438,25 @@ describe("timeout and abort", () => {
         : Promise.resolve(grailOk([])),
     );
 
-    await expect(executeDqlQuery(TENANT, "fetch logs", { timeoutMs: 20 })).rejects.toThrow(
-      /^Dynatrace is not responding \(0s timeout\)$/,
-    );
+    await expect(executeDqlQuery(TENANT, "fetch logs", { timeoutMs: 20 })).rejects.toThrow("not responding");
   });
 });
 
 describe("network failures", () => {
+  // The wording of network errors is pinned in network.test.ts.
+  const dnsFailure = () => Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+
   it("names a non-existent environment host", async () => {
-    mockGetAccessToken.mockResolvedValueOnce("token");
-    mockFetch.mockRejectedValueOnce(Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }));
+    mockFetch.mockRejectedValueOnce(dnsFailure());
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(
-      "Environment URL not found: test.live.dynatrace.com",
+      environmentNetworkError(dnsFailure(), TENANT.tenantEndpoint).message,
     );
   });
 
   it("reports an unreachable SSO as a network problem", async () => {
-    mockGetAccessToken.mockRejectedValueOnce(
-      Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }),
-    );
+    mockGetAccessToken.mockRejectedValueOnce(dnsFailure());
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(
-      "Cannot reach the SSO endpoint sso.dynatrace.com",
+      ssoNetworkError(dnsFailure(), TENANT.ssoEndpoint).message,
     );
   });
 

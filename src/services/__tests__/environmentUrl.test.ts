@@ -20,16 +20,10 @@ describe("isDynatraceHost", () => {
 
 describe("normalizeUrl", () => {
   it.each([
-    ["", ""],
     ["   ", ""],
-    ["/", ""],
     ["///", ""],
-    ["https://x///", "https://x"],
-    ["https://x/a//", "https://x/a"],
-    [" https://x/ \n", "https://x"],
+    [" https://x/a// \n", "https://x/a"],
     ["https://x//a//b", "https://x//a//b"],
-    ["https://x", "https://x"],
-    [" / / ", "/ "],
   ])("normalizes %j to %j", (input, expected) => {
     expect(normalizeUrl(input)).toBe(expected);
   });

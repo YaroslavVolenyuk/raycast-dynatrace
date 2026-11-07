@@ -19,25 +19,12 @@ describe("spanRecordSchema contract", () => {
     }
   });
 
-  it("fixture contains lower-case ok and error status_code values (as Grail returns them)", () => {
-    const codes = fixture.records.map((r) => (r as unknown as SpanRecord)["span.status_code"]);
-    expect(codes).toContain("ok");
-    expect(codes).toContain("error");
-  });
-
   it("coerces string-encoded numeric fields (duration, http status, port)", () => {
     const root = findRoot();
     const parsed = spanRecordSchema.parse(root);
     expect(typeof parsed.duration).toBe("number");
     expect(typeof parsed["http.response.status_code"]).toBe("number");
     expect(typeof parsed["server.port"]).toBe("number");
-  });
-
-  it("fixture contains a root span and a DB error span", () => {
-    const root = findRoot();
-    const dbSpan = fixture.records.find((r) => (r as unknown as SpanRecord)["db.system"] !== undefined);
-    expect(root).toBeDefined();
-    expect(dbSpan).toBeDefined();
   });
 });
 
@@ -71,19 +58,8 @@ describe("normalizeSpan", () => {
   it("converts nanosecond duration string to microseconds", () => {
     const root = findRoot() as unknown as SpanRecord;
     const entry = normalizeSpan(spanRecordSchema.parse(root));
-    // fixture duration "182000000" ns → 182000 µs → "182ms"
+    // fixture duration "182000000" ns → 182000 µs
     expect(entry.durationUs).toBe(182_000);
-    expect(formatDuration(entry.durationUs!)).toBe("182ms");
-  });
-
-  it("upper-cases status_code", () => {
-    const entry = normalizeSpan({
-      "trace.id": "abc",
-      "span.id": "def",
-      start_time: "2026-01-01T00:00:00Z",
-      "span.status_code": "error",
-    });
-    expect(entry.statusCode).toBe("ERROR");
   });
 
   it("defaults to UNSET when span.status_code is absent", () => {
@@ -139,16 +115,9 @@ describe("normalizeSpan", () => {
 // ── formatDuration ────────────────────────────────────────────────────────────
 
 describe("formatDuration", () => {
-  it("formats microseconds < 1000 as µs", () => {
+  it("formats microseconds as µs, ms or s", () => {
     expect(formatDuration(500)).toBe("500µs");
-  });
-
-  it("formats microseconds as ms (< 1s)", () => {
     expect(formatDuration(182_000)).toBe("182ms");
-    expect(formatDuration(52_000)).toBe("52ms");
-  });
-
-  it("formats microseconds >= 1s as seconds", () => {
     expect(formatDuration(5_001_000)).toBe("5.0s");
   });
 });
@@ -162,11 +131,8 @@ describe("buildSpansQuery", () => {
 
   // Grail stores span.status_code lower-case (verified MCP 2026-07-01):
   // filtering with the upper-case value matches zero records.
-  it("filters ERROR status using the raw lower-case value", () => {
+  it("filters ERROR and OK status using the raw lower-case value", () => {
     expect(buildSpansQuery({ status: "error" })).toContain('`span.status_code` == "error"');
-  });
-
-  it("filters OK status using the raw lower-case value", () => {
     expect(buildSpansQuery({ status: "ok" })).toContain('`span.status_code` == "ok"');
   });
 

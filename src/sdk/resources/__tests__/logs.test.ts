@@ -15,35 +15,20 @@ describe("logRecordSchema contract", () => {
       expect(() => logRecordSchema.parse(record)).not.toThrow();
     }
   });
-
-  it("fixture contains both NONE and ERROR status values", () => {
-    const statuses = fixture.records.map((r) => (r as LogRecord).status);
-    expect(statuses).toContain("NONE");
-    expect(statuses).toContain("ERROR");
-  });
 });
 
 // ── Normalizer ────────────────────────────────────────────────────────────────
 
 describe("normalizeLog", () => {
-  it("maps raw fields to the domain model (ERROR record)", () => {
-    const errorRecord = fixture.records.find((r) => (r as LogRecord).status === "ERROR") as LogRecord;
-    expect(errorRecord).toBeDefined();
-    const entry = normalizeLog(errorRecord);
-    expect(entry).toMatchObject({
+  it("maps raw fields to the domain model (fixture ERROR and NONE records)", () => {
+    const byStatus = (status: string) => normalizeLog(fixture.records.find((r) => r.status === status) as LogRecord);
+    expect(byStatus("ERROR")).toMatchObject({
       level: "ERROR",
       service: "function-runner",
       host: "srv-prod-lambda-01",
       status: "ERROR",
     });
-    expect(entry.raw).toBeDefined();
-  });
-
-  it("maps raw fields to the domain model (NONE record)", () => {
-    const noneRecord = fixture.records.find((r) => (r as LogRecord).status === "NONE") as LogRecord;
-    expect(noneRecord).toBeDefined();
-    const entry = normalizeLog(noneRecord);
-    expect(entry).toMatchObject({
+    expect(byStatus("NONE")).toMatchObject({
       level: "NONE",
       service: "entity-query-engine",
       host: "srv-prod-query-02",
@@ -52,10 +37,8 @@ describe("normalizeLog", () => {
   });
 
   it("prefers host.name over dt.entity.host", () => {
-    // Real fixture records have host.name set; verify normalizer picks it up
-    const record = fixture.records[0] as LogRecord;
-    const entry = normalizeLog(record);
-    expect(entry.host).toBe("srv-prod-query-02");
+    const entry = normalizeLog({ timestamp: "t", "host.name": "web-1", "dt.entity.host": "HOST-abc" });
+    expect(entry.host).toBe("web-1");
   });
 
   it("falls back to dt.entity.host when host.name is absent", () => {
@@ -88,20 +71,8 @@ describe("buildLogsQuery", () => {
     expect(buildLogsQuery({ level: "all" })).not.toContain("filter status");
   });
 
-  it("maps warn -> status WARN", () => {
+  it("filters on the status a level maps to", () => {
     expect(buildLogsQuery({ level: "warn" })).toContain('filter status == "WARN"');
-  });
-
-  it("maps error -> status ERROR", () => {
-    expect(buildLogsQuery({ level: "error" })).toContain('filter status == "ERROR"');
-  });
-
-  it("maps info -> status INFO", () => {
-    expect(buildLogsQuery({ level: "info" })).toContain('filter status == "INFO"');
-  });
-
-  it("maps none -> status NONE", () => {
-    expect(buildLogsQuery({ level: "none" })).toContain('filter status == "NONE"');
   });
 
   it("always sorts desc and applies a limit", () => {

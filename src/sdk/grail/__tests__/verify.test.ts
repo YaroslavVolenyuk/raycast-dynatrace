@@ -12,6 +12,7 @@ jest.mock("../../auth", () => {
 });
 
 import { testTenantConnection } from "../verify";
+import { environmentNetworkError } from "../network";
 import { validateTenantCredentials } from "../../auth";
 
 const mockFetch = jest.fn();
@@ -36,7 +37,7 @@ it("fails when the environment host does not exist, although the SSO answered", 
   mockFetch.mockRejectedValueOnce(dnsFailure());
   const r = await testTenantConnection(TENANT);
   expect(r.valid).toBe(false);
-  expect(r.valid === false && r.error).toMatch(/Environment URL not found: abc12345\.dev\.apps\.dynatracelabs\.ua/);
+  expect(r).toEqual({ valid: false, error: environmentNetworkError(dnsFailure(), TENANT.tenantEndpoint).message });
 });
 
 it("fails on an HTML page instead of the platform API", async () => {

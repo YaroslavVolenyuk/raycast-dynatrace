@@ -8,6 +8,7 @@ jest.mock("../../auth", () => {
   return { ...actual, getAccessToken: jest.fn(), invalidateTokenCache: jest.fn() };
 });
 
+import { environmentNetworkError } from "../network";
 import { applySuggestion, autocompleteDql, normalizeCompletion, normalizeVerification, verifyDql } from "../assist";
 import { getAccessToken, invalidateTokenCache } from "../../auth";
 import fixture from "../__fixtures__/assist.json";
@@ -128,12 +129,9 @@ describe("HTTP", () => {
     await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow("Dynatrace: missing scope");
   });
 
-  it("falls back to the status line when the error body is not JSON", async () => {
+  it("falls back to the status line when the error body has no message", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 500, text: async () => "<html>" });
     await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow("HTTP 500 from query:verify");
-  });
-
-  it("falls back to the status line when the JSON body has no message", async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 400, text: async () => JSON.stringify({ error: {} }) });
     await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow("HTTP 400 from query:verify");
   });
@@ -145,32 +143,19 @@ describe("HTTP", () => {
     expect(invalidateTokenCache).toHaveBeenCalledTimes(1);
   });
 
-  it("maps an OAuth rejection to a credentials hint", async () => {
+  // Token errors go through the shared http.acquireAccessToken (tested in query.test.ts): only the wiring here.
+  it("maps an OAuth rejection without calling the environment", async () => {
     (getAccessToken as jest.Mock).mockRejectedValueOnce(new OAuthError(401, "bad"));
-    await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow(
-      "OAuth error: check client_id / client_secret in Manage Tenants (401)",
-    );
+    await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow(/^OAuth error: /);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("maps an SSO network failure", async () => {
-    (getAccessToken as jest.Mock).mockRejectedValueOnce(
-      new TypeError("fetch failed", { cause: { code: "ECONNREFUSED" } }),
-    );
-    await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow(
-      "Cannot reach the SSO endpoint sso.dynatrace.com (ECONNREFUSED). Check your network.",
-    );
-  });
-
-  it("rethrows other token errors unchanged", async () => {
-    const boom = new Error("boom");
-    (getAccessToken as jest.Mock).mockRejectedValueOnce(boom);
-    await expect(verifyDql(TENANT, "fetch logs")).rejects.toBe(boom);
-  });
-
   it("maps an environment network failure", async () => {
-    mockFetch.mockRejectedValueOnce(new TypeError("fetch failed", { cause: { code: "ENOTFOUND" } }));
-    await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow("Environment URL not found: abc.apps.dynatrace.com");
+    const dnsFailure = () => new TypeError("fetch failed", { cause: { code: "ENOTFOUND" } });
+    mockFetch.mockRejectedValueOnce(dnsFailure());
+    await expect(verifyDql(TENANT, "fetch logs")).rejects.toThrow(
+      environmentNetworkError(dnsFailure(), TENANT.tenantEndpoint).message,
+    );
   });
 
   it("reports a timeout when the request is aborted by the internal timer", async () => {

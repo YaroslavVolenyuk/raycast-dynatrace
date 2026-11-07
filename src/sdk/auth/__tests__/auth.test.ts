@@ -12,6 +12,8 @@ const TENANT: TenantConfig = {
   scopes: ["storage:logs:read"],
 };
 
+// Exact user-facing OAuth messages are pinned in the "message for" table only.
+
 // Mock global fetch
 const mockFetch = jest.fn();
 global.fetch = mockFetch as unknown as typeof fetch;
@@ -33,7 +35,7 @@ function mockErrorResponse(status: number, body: string) {
 }
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  jest.resetAllMocks(); // also drops queued mockResolvedValueOnce values, so a failing test cannot leak into the next
   // Reset module registry so the in-memory tokenCache is re-created per test.
   jest.resetModules();
 });
@@ -41,14 +43,6 @@ beforeEach(() => {
 async function loadAuth() {
   return import("../index");
 }
-
-test("getAccessToken returns token on first call", async () => {
-  mockTokenResponse("fresh-token", 300);
-  const { getAccessToken } = await loadAuth();
-  const token = await getAccessToken(TENANT);
-  expect(token).toBe("fresh-token");
-  expect(mockFetch).toHaveBeenCalledTimes(1);
-});
 
 test("getAccessToken uses cache on second call — fetch called only once", async () => {
   mockTokenResponse("cached-token", 600);
@@ -76,30 +70,6 @@ test("invalidateTokenCache forces a refetch on next call", async () => {
   expect(mockFetch).toHaveBeenCalledTimes(2);
 });
 
-test("validateTenantCredentials surfaces the SSO error reason (401)", async () => {
-  mockErrorResponse(401, '{"error":"unauthorized"}');
-  const { validateTenantCredentials } = await loadAuth();
-  const result = await validateTenantCredentials(TENANT);
-  expect(result.valid).toBe(false);
-  expect(result.valid === false && result.error).toMatch(/unauthorized/i);
-});
-
-test("validateTenantCredentials hints at scopes on invalid_scope (400)", async () => {
-  mockErrorResponse(400, '{"error":"invalid_scope","error_description":"scope storage:foo:read not allowed"}');
-  const { validateTenantCredentials } = await loadAuth();
-  const result = await validateTenantCredentials(TENANT);
-  expect(result.valid === false && result.error).toMatch(/invalid_scope/);
-  expect(result.valid === false && result.error).toMatch(/scopes are not granted/);
-});
-
-test("validateTenantCredentials hints at credentials on invalid_client (400)", async () => {
-  mockErrorResponse(400, '{"error":"invalid_client"}');
-  const { validateTenantCredentials } = await loadAuth();
-  const result = await validateTenantCredentials(TENANT);
-  expect(result.valid === false && result.error).toMatch(/invalid_client/);
-  expect(result.valid === false && result.error).toMatch(/Client ID and Secret/);
-});
-
 describe("OAuthError — secret redaction", () => {
   it("redacts client_secret from the body", async () => {
     const { OAuthError } = await loadAuth();
@@ -107,6 +77,8 @@ describe("OAuthError — secret redaction", () => {
     expect(err.message).not.toContain("super-secret");
     expect(err.message).toContain("[REDACTED]");
     expect(err.statusCode).toBe(400);
+    // the UI message is built from the body
+    expect(err.body).not.toContain("super-secret");
   });
 
   it("redacts multiple client_secret occurrences", async () => {
@@ -115,12 +87,6 @@ describe("OAuthError — secret redaction", () => {
     expect(err.message).not.toContain("secret1");
     expect(err.message).not.toContain("secret2");
     expect(err.message).toMatch(/\[REDACTED\].*\[REDACTED\]/);
-  });
-
-  it("redacts the body that the UI message is built from", async () => {
-    const { OAuthError } = await loadAuth();
-    const err = new OAuthError(400, "client_secret=super-secret&grant_type=client_credentials");
-    expect(err.body).not.toContain("super-secret");
   });
 
   it("keeps an echoed secret out of the connection-test message", async () => {
@@ -151,17 +117,8 @@ describe("OAuthError — secret redaction", () => {
   });
 });
 
-// Editing a tenant keeps its id; a cached token must not vouch for new credentials.
-test("validateTenantCredentials re-checks after the secret changes", async () => {
-  mockTokenResponse("good-token", 600);
-  mockErrorResponse(401, '{"error":"invalid_client"}');
-  const { getAccessToken, validateTenantCredentials } = await loadAuth();
-  await getAccessToken(TENANT);
-  const result = await validateTenantCredentials({ ...TENANT, clientSecret: "garbage" });
-  expect(result.valid).toBe(false);
-  expect(mockFetch).toHaveBeenCalledTimes(2);
-});
-
+// A cached token must not vouch for the credentials: editing a tenant keeps its id,
+// and the OAuth client may have been deleted meanwhile.
 test("validateTenantCredentials does not trust a cached token for unchanged credentials", async () => {
   mockTokenResponse("token-1", 600);
   mockErrorResponse(401, '{"error":"invalid_client"}');
@@ -209,6 +166,7 @@ test("validateTenantCredentials never shows [object Object] for a nested error b
 
 test.each([
   [400, "", "Invalid client credentials"],
+  [400, '{"error":"invalid_client"}', "invalid_client — check the Client ID and Secret"],
   [
     400,
     '{"error":"invalid_scope","error_description":"invalid_client"}',

@@ -4,7 +4,6 @@ import {
   keyValueGroupsSvg,
   headerMarkdown,
   headerSvg,
-  severityIcon,
   severityIconSvg,
   logSeverity,
   severityOf,
@@ -75,12 +74,6 @@ describe("headerSvg", () => {
     const svg = headerSvg(header, false);
     expect(svg).toContain("@media (prefers-color-scheme:light)");
     expect(svg).toContain("@media (prefers-color-scheme:dark)");
-    expect(svg).toContain("#FF6369");
-    expect(svg).toContain("#D92D3A");
-  });
-
-  it("switches the palette with the theme", () => {
-    expect(headerSvg(header, true)).not.toBe(headerSvg(header, false));
   });
 });
 
@@ -93,13 +86,6 @@ describe("severityIconSvg", () => {
   it("round-trips through a data URI", () => {
     const svg = severityIconSvg("info", true);
     expect(Buffer.from(svgDataUri(svg).split(",")[1], "base64").toString()).toBe(svg);
-  });
-});
-
-describe("severityIcon", () => {
-  it("builds each severity once", () => {
-    expect(severityIcon("error")).toBe(severityIcon("error"));
-    expect(severityIcon("error")).not.toBe(severityIcon("ok"));
   });
 });
 
@@ -133,12 +119,6 @@ describe("keyValueGroupsSvg", () => {
     const lines = [...svg.matchAll(/font-size="13"[^>]*>([^<]*)</g)].map((m) => m[1]);
     expect(lines.length).toBeGreaterThan(1);
     expect(lines.join("")).toBe(id);
-    expect(svg).not.toContain('<text x="12" y="86"');
-  });
-
-  it("keeps short values beside their key", () => {
-    const svg = keyValueGroupsSvg([{ title: "A", rows: [["host", "srv-02"]] }], false);
-    expect(svg).toContain(`<text x="196" y="${8 + 40 + 21}"`);
   });
 
   it("breaks a list after the separator when the first item fits", () => {

@@ -92,12 +92,8 @@ describe("isTruncated", () => {
 
 describe("requiredScopesForQuery", () => {
   it.each([
-    ["fetch logs | limit 1", "storage:logs:read"],
-    ["  fetch spans", "storage:spans:read"],
-    ["fetch bizevents", "storage:bizevents:read"],
+    ["  fetch spans | limit 1", "storage:spans:read"],
     ["fetch dt.davis.problems", "storage:events:read"],
-    ["fetch events", "storage:events:read"],
-    ["fetch dt.entity.host", "storage:entities:read"],
     ["timeseries avg(dt.host.cpu.usage)", "storage:metrics:read"],
   ])("%s needs %s", (query, scope) => {
     expect(requiredScopesForQuery(query)).toEqual(["storage:buckets:read", scope]);

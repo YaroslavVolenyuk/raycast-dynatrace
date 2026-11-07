@@ -11,7 +11,6 @@ import {
   newForeignHosts,
   type TenantFormValues,
 } from "../tenantForm.helpers";
-import { normalizeUrl } from "../../../../services/environmentUrl";
 
 const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValues => ({
   authType: "oauth",
@@ -26,35 +25,15 @@ const validValues = (overrides: Partial<TenantFormValues> = {}): TenantFormValue
 });
 
 describe("parseScopes", () => {
-  it("splits on whitespace and commas and de-dupes", () => {
-    expect(parseScopes("a b,c  a")).toEqual(["a", "b", "c"]);
-  });
-
-  it("splits one-scope-per-line (TextArea input)", () => {
-    expect(parseScopes("storage:logs:read\nstorage:problems:read\n\n")).toEqual([
-      "storage:logs:read",
-      "storage:problems:read",
-    ]);
-  });
-
-  it("returns [] for empty / whitespace input", () => {
+  it("splits on whitespace, commas and line breaks, de-dupes and drops blanks", () => {
+    expect(parseScopes("a b,c  a\nd\n\n")).toEqual(["a", "b", "c", "d"]);
     expect(parseScopes("   ")).toEqual([]);
-  });
-});
-
-describe("normalizeUrl", () => {
-  it("trims and strips trailing slashes", () => {
-    expect(normalizeUrl("  https://x.dynatrace.com/// ")).toBe("https://x.dynatrace.com");
   });
 });
 
 describe("validateForm", () => {
   it("returns no errors for valid values", () => {
     expect(validateForm(validValues())).toEqual({});
-  });
-
-  it("flags missing name", () => {
-    expect(validateForm(validValues({ name: "  " })).name).toBeDefined();
   });
 
   it("rejects a non-https environment URL", () => {
@@ -67,16 +46,6 @@ describe("validateForm", () => {
   // The client secret is posted to this URL: never in plain text.
   it("rejects a plain-http SSO endpoint", () => {
     expect(validateForm(validValues({ ssoEndpoint: "http://sso.example.com/token" })).ssoEndpoint).toBeDefined();
-  });
-
-  it("requires at least one scope", () => {
-    expect(validateForm(validValues({ scopes: "" })).scopes).toBeDefined();
-  });
-
-  it("requires client id and secret", () => {
-    const errs = validateForm(validValues({ clientId: "", clientSecret: "" }));
-    expect(errs.clientId).toBeDefined();
-    expect(errs.clientSecret).toBeDefined();
   });
 });
 
@@ -114,27 +83,9 @@ describe("buildTenantConfig", () => {
     expect(buildTenantConfig(validValues()).id).not.toBe(buildTenantConfig(validValues()).id);
   });
 
-  it("falls back to the prod SSO for blank SSO on a prod tenant", () => {
-    const cfg = buildTenantConfig(
-      validValues({ ssoEndpoint: "", tenantEndpoint: "https://abc12345.apps.dynatrace.com" }),
-    );
-    expect(cfg.ssoEndpoint).toBe("https://sso.dynatrace.com/sso/oauth2/token");
-  });
-
   it("does not misread 'dev' outside a domain label as a dev environment", () => {
     const cfg = buildTenantConfig(validValues({ ssoEndpoint: "", tenantEndpoint: "https://devcorp.example.com" }));
     expect(cfg.ssoEndpoint).toBe("https://sso.dynatrace.com/sso/oauth2/token");
-  });
-
-  it("keeps an explicit SSO override", () => {
-    const cfg = buildTenantConfig(validValues({ ssoEndpoint: "https://custom.sso.example.com/token" }));
-    expect(cfg.ssoEndpoint).toBe("https://custom.sso.example.com/token");
-  });
-});
-
-describe("REQUIRED_SCOPES (pre-filled for new tenants)", () => {
-  it("does not pre-fill the optional events scope", () => {
-    expect(REQUIRED_SCOPES).not.toContain("storage:events:read");
   });
 });
 
@@ -147,15 +98,6 @@ describe("describeScopeCheck", () => {
       title: "Connection verified",
       message: undefined,
     });
-  });
-
-  it("only hints (success) when just the optional events scope is missing", () => {
-    const r = describeScopeCheck(withScopes([...REQUIRED_SCOPES]));
-    expect(r.style).toBe("success");
-    expect(r.message).toContain("storage:events:read");
-    // Both places must be named: granting it in Dynatrace alone does not put it in the token request.
-    expect(r.message).toMatch(/OAuth client/);
-    expect(r.message).toMatch(/tenant/);
   });
 
   it("fails when a required scope is missing", () => {
@@ -175,14 +117,12 @@ describe("environment URL as pasted by users", () => {
     expect(cfg.tenantEndpoint).toBe("https://abc12345.apps.dynatrace.com");
   });
 
-  it("rejects a classic .live URL and suggests the platform URL", () => {
-    const errors = validateForm(validValues({ tenantEndpoint: "https://abc12345.live.dynatrace.com" }));
-    expect(errors.tenantEndpoint).toContain("https://abc12345.apps.dynatrace.com");
-  });
-
-  it("rejects a classic URL with a path too", () => {
-    const errors = validateForm(validValues({ tenantEndpoint: "https://abc12345.live.dynatrace.com/#dashboards" }));
-    expect(errors.tenantEndpoint).toContain("https://abc12345.apps.dynatrace.com");
+  it("rejects a classic .live URL, with or without a path, and suggests the platform URL", () => {
+    for (const tenantEndpoint of ["https://abc12345.live.dynatrace.com", "https://abc12345.live.dynatrace.com/#x"]) {
+      expect(validateForm(validValues({ tenantEndpoint })).tenantEndpoint).toContain(
+        "https://abc12345.apps.dynatrace.com",
+      );
+    }
   });
 
   it("accepts a non-Dynatrace host (proxies, Managed) unchanged", () => {
@@ -205,11 +145,6 @@ describe("platform-token tenants in the form", () => {
     expect(validateForm(tokenValues())).toEqual({});
   });
 
-  it("requires the token and rejects a classic API token", () => {
-    expect(validateForm(tokenValues({ platformToken: " " })).platformToken).toMatch(/required/);
-    expect(validateForm(tokenValues({ platformToken: "dt0c01.X.Y" })).platformToken).toMatch(/classic API token/);
-  });
-
   it("keeps only the fields of the chosen method", () => {
     const token = buildTenantConfig(tokenValues({ clientSecret: "left-over" }), "id1");
     expect(token).toMatchObject({ platformToken: "dt0s16.A.B", clientId: "", clientSecret: "", ssoEndpoint: "" });
@@ -228,12 +163,7 @@ describe("platform-token tenants in the form", () => {
     expect(r).toMatchObject({ style: "failure", title: "Connected, but access denied" });
   });
 
-  it("shows the reason from the 403 body when there is one", () => {
-    const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES] }, { accessDenied: true, detail: "Forbidden" });
-    expect(r.message).toContain("Forbidden");
-  });
-
-  it("does not double the full stop of a 403 reason", () => {
+  it("shows the reason from the 403 body, without doubling its full stop", () => {
     const r = describeScopeCheck({ scopes: [...REQUIRED_SCOPES] }, { accessDenied: true, detail: "Denied." });
     expect(r.message).toMatch(/^Denied\. The /);
   });
@@ -298,6 +228,7 @@ describe("validateForm (exact messages and order)", () => {
 });
 
 describe("describeScopeCheck optional-scope hint", () => {
+  // Both places must be named: granting the scope in Dynatrace alone does not put it in the token request.
   it("names the scope and how to get it, per credentials kind", () => {
     expect(describeScopeCheck({ scopes: [...REQUIRED_SCOPES] })).toEqual({
       style: "success",

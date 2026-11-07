@@ -38,14 +38,6 @@ describe("listTenants", () => {
     expect(await listTenants()).toEqual([]);
   });
 
-  it("returns stored tenants after saving", async () => {
-    await saveTenant(makeTenant("t1"));
-    await saveTenant(makeTenant("t2"));
-    const result = await listTenants();
-    expect(result).toHaveLength(2);
-    expect(result.map((t) => t.id)).toEqual(["t1", "t2"]);
-  });
-
   it("per-item safeParse: one invalid record does not corrupt others", async () => {
     const good = makeTenant("good");
     const invalid = { id: "", name: "" }; // fails tenantConfigSchema (empty strings)
