@@ -7,7 +7,14 @@ npx lint-staged
 # 2. Types (whole project: a staged change can break an unstaged file).
 npm run typecheck
 
-# 3. Secrets in the staged diff. gitleaks is a separate binary (brew install gitleaks).
+# 3. Project security rules (THREAT_MODEL.md), whole tree: about a second.
+if command -v semgrep >/dev/null 2>&1; then
+  semgrep scan --config .semgrep --error --metrics=off --quiet
+else
+  echo "warning: semgrep not installed, skipping project security rules (CI still runs them). Install: brew install semgrep" >&2
+fi
+
+# 4. Secrets in the staged diff. gitleaks is a separate binary (brew install gitleaks).
 if command -v gitleaks >/dev/null 2>&1; then
   gitleaks protect --staged --redact --config .gitleaks.toml
 else

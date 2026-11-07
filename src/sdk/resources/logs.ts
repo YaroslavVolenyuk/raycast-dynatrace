@@ -132,7 +132,8 @@ export interface ListLogsOptions {
 
 function logsFetchClause(timeframeDql: string | undefined, timeframe: ListLogsOptions["timeframe"]): string {
   if (timeframeDql) return `fetch logs, from: now()-${timeframeDql}`;
-  if (timeframe) return `fetch logs, from: "${timeframe.start}", to: "${timeframe.end}"`;
+  if (timeframe)
+    return `fetch logs, from: "${escapeDqlString(timeframe.start)}", to: "${escapeDqlString(timeframe.end)}"`;
   return "fetch logs";
 }
 
@@ -149,12 +150,11 @@ export function buildLogsQuery(opts: ListLogsOptions = {}): string {
 
   const mapped = LOG_LEVEL_MAP[level] ?? null;
   if (mapped !== null) {
-    parts.push(`filter status == "${mapped}"`);
+    parts.push(`filter status == "${escapeDqlString(mapped)}"`);
   }
   if (search) {
-    const s = escapeDqlString(search);
     parts.push(
-      `filter contains(content, "${s}", caseSensitive: false) or contains(service.name, "${s}", caseSensitive: false)`,
+      `filter contains(content, "${escapeDqlString(search)}", caseSensitive: false) or contains(service.name, "${escapeDqlString(search)}", caseSensitive: false)`,
     );
   }
   parts.push("sort timestamp desc");

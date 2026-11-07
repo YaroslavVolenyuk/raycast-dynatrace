@@ -48,6 +48,16 @@ jobs:
       - name: Security audit (runtime deps only)
         run: npm audit --omit=dev --audit-level=high
 
+  semgrep:
+    # Project rules for the bug classes in THREAT_MODEL.md (.semgrep/rules.yml).
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Semgrep (project rules)
+        run: pipx run --spec semgrep==1.183.0 semgrep scan --config .semgrep --error --metrics=off
+
   gitleaks:
     runs-on: ubuntu-latest
     steps:

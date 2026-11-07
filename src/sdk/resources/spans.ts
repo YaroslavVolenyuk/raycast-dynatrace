@@ -206,7 +206,8 @@ export interface ListSpansOptions {
 
 function spansFetchClause(timeframeDql: string | undefined, timeframe: ListSpansOptions["timeframe"]): string {
   if (timeframeDql) return `fetch spans, from: now()-${timeframeDql}`;
-  if (timeframe) return `fetch spans, from: "${timeframe.start}", to: "${timeframe.end}"`;
+  if (timeframe)
+    return `fetch spans, from: "${escapeDqlString(timeframe.start)}", to: "${escapeDqlString(timeframe.end)}"`;
   return "fetch spans";
 }
 
@@ -227,7 +228,7 @@ export function buildSpansQuery(opts: ListSpansOptions = {}): string {
 
   const mappedStatus = SPAN_STATUS_MAP[status] ?? null;
   if (mappedStatus !== null) {
-    parts.push(`filter \`span.status_code\` == "${mappedStatus}"`);
+    parts.push(`filter \`span.status_code\` == "${escapeDqlString(mappedStatus)}"`);
   }
 
   parts.push("sort start_time desc");

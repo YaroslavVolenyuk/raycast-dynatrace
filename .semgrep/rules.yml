@@ -1,0 +1,74 @@
+# Project rules for the bug classes in THREAT_MODEL.md. Each rule names the
+# threat it guards; a new class of finding gets a rule here, so it cannot come
+# back in another file.
+#
+#   semgrep scan --config .semgrep --error --metrics=off
+#
+# A justified exception: put `// nosemgrep: <rule-id>` on the line, with a reason.
+#
+# Not covered here, because a pattern cannot see it: what reaches the plain-file
+# Cache depends on types (D1), so src/ui/__tests__/noDiskCache.test.ts and the
+# menu bar store tests guard it instead.
+
+rules:
+  # C2 — on a 307/308 fetch re-sends the body (client secret included) to the
+  # Location host. Every request in the auth layer must refuse redirects.
+  - id: secret-request-follows-redirects
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      fetch() in the auth layer must set `redirect: "error"`: a 307/308 would
+      re-send the body, client secret included, to another host (THREAT_MODEL.md C2).
+    paths:
+      include: ["/src/sdk/auth/"]
+      exclude: ["__tests__/"]
+    pattern-either:
+      - pattern: fetch($URL)
+      - patterns:
+          - pattern: fetch($URL, {...})
+          - pattern-not: 'fetch($URL, {..., redirect: "error", ...})'
+
+  # R1/R2 — an image or link URL in Detail markdown makes Raycast load it with
+  # no click. Only the base64 data URIs from svgDataUri() may go there.
+  - id: markdown-interpolated-image-or-link
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Interpolated URL in markdown image/link syntax. Telemetry must never become
+      a URL Raycast loads; use svgDataUri() for generated images (THREAT_MODEL.md R1, R2).
+    paths:
+      include: ["/src/ui/**/*.ts", "/src/ui/**/*.tsx"]
+      exclude: ["__tests__/"]
+    pattern-regex: '\]\(\$\{(?!svgDataUri\()'
+
+  # R1 — interpolating into markdown outside a code fence lets the value add its
+  # own images, links or HTML.
+  - id: markdown-unfenced-interpolation
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Value interpolated into markdown outside a code fence. Wrap telemetry in
+      fenceCode() (THREAT_MODEL.md R1).
+    paths:
+      include: ["/src/ui/**/*.ts", "/src/ui/**/*.tsx"]
+      exclude: ["__tests__/"]
+    pattern-either:
+      # markdown={`…${x}…`} directly on a component
+      - pattern-regex: 'markdown=\{\s*`[^`]*\$\{(?!fenceCode\(|svgDataUri\()'
+      # a template literal that starts a markdown block (# heading, > quote, list item)
+      - pattern-regex: '`(#{1,6} |> |[-*] )[^`]*\$\{(?!fenceCode\(|svgDataUri\()'
+
+  # Q1 — a value inside a DQL string literal must be escaped, or a `"` in it
+  # ends the literal and the rest is parsed as DQL.
+  - id: dql-unescaped-string-literal
+    languages: [regex]
+    severity: ERROR
+    message: >-
+      Value interpolated into a DQL string literal without escapeDqlString()
+      (THREAT_MODEL.md Q1).
+    paths:
+      include: ["/src/sdk/resources/", "/src/ui/**/*.ts", "/src/ui/**/*.tsx"]
+      exclude: ["__tests__/"]
+    # A template literal that builds DQL (contains a fetch or filter command) and
+    # puts ${…} between double quotes without escapeDqlString().
+    pattern-regex: '`(?:\\`|[^`])*\b(?:fetch|filter|filterOut)\b(?:\\`|[^`])*"\$\{(?!escapeDqlString\()[^}]*\}"'
