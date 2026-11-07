@@ -11,7 +11,17 @@ jest.mock("@raycast/api", () => ({
   ...jest
     .requireActual<typeof import("../../../__tests__/raycastTree")>("../../../__tests__/raycastTree")
     .raycastStubs(),
-  Icon: { MagnifyingGlass: "icon-magnifying-glass", Terminal: "icon-terminal" },
+  Icon: {
+    MagnifyingGlass: "icon-magnifying-glass",
+    Terminal: "icon-terminal",
+    Clock: "icon-clock",
+    Gear: "icon-gear",
+    AppWindow: "icon-app-window",
+    ComputerChip: "icon-computer-chip",
+    Cloud: "icon-cloud",
+    Box: "icon-box",
+    Link: "icon-link",
+  },
   useNavigation: () => ({ push: mockPush }),
 }));
 jest.mock("../../search-traces/SearchTraces", () => Object.assign(() => null, { displayName: "SearchTraces" }));
@@ -28,6 +38,16 @@ function runAction(onAction: () => void) {
 
 const serialize = (el: ReactElement<Record<string, unknown>>) => serializeTree(el, runAction);
 
+/** Spells an embedded SVG out as its text nodes, so snapshots pin the content without the base64. */
+function svgText(b64: string): string {
+  const texts = [
+    ...Buffer.from(b64, "base64")
+      .toString()
+      .matchAll(/<text[^>]*>([^<]*)<\/text>/g),
+  ].map((m) => m[1]);
+  return `{SVG: ${texts.join(" | ")}}`;
+}
+
 function render(entry: LogEntry, tenant?: TenantConfig, timeframe?: string) {
   const tree = serialize(
     LogDetail({ entry, tenant, timeframe: timeframe as never }) as ReactElement<Record<string, unknown>>,
@@ -35,7 +55,12 @@ function render(entry: LogEntry, tenant?: TenantConfig, timeframe?: string) {
   if (typeof tree === "string") throw new Error("unexpected text root");
   const { markdown, ...rest } = tree.props;
   // Zero-width spaces (autolink suppression) are spelled out so the snapshot stays lint-clean.
-  return { markdown: (markdown as string).replaceAll("\u200B", "{ZWSP}"), tree: { ...tree, props: rest } };
+  return {
+    markdown: (markdown as string)
+      .replaceAll("\u200B", "{ZWSP}")
+      .replace(/!\[\]\(data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)\)/g, (_, b64) => svgText(b64)),
+    tree: { ...tree, props: rest },
+  };
 }
 
 const tenant = { tenantEndpoint: "https://abc123.apps.dynatrace.com/" } as TenantConfig;
@@ -89,51 +114,15 @@ describe("LogDetail", () => {
     );
     expect(render(entry, tenant, "now-2h")).toMatchInlineSnapshot(`
      {
-       "markdown": "\`\`\`
+       "markdown": "{SVG: shop | /var/log/app.log}
+
+     \`\`\`
      hello
      \`\`\`
 
-     ### Topology
+     {SVG: TOPOLOGY | dt.source_entity | PROCESS_GROUP_INSTANCE-1, | HOST-1 | dt.entity.host | HOST-1 | dt.entity.process_group_insta… | PGI-1 | dt.entity.custom_device | CD-1 | dt.entity.aws_lambda_function | AWS_LAMBDA-1 | INFRASTRUCTURE | dt.host_group.id | hg-1 | aws.availability_zone | eu-west-1a | cloud.account.id | 123456789012 | aws.arn | arn:aws:lambda:eu-west-1:123:functio | n:x | SERVERLESS | faas.name | fn | faas.version | $LATEST | faas.id | fid | KUBERNETES | k8s.node.name | node-1 | k8s.pod.uid | pod-uid | APPLICATION | dt.app.version | 1.2.3 | process.technology | JAVA, TOMCAT | OperatorVersion | v1 | PIPELINE | dt.openpipeline.source | oneagent | dt.openpipeline.pipelines | logs:default | dt.auth.origin | token | TELEMETRY | event.type | LOG}
 
-     | Field | Value |
-     |---|---|
-     | dt{ZWSP}.source\\_entity | PROCESS\\_GROUP\\_INSTANCE-1, HOST-1 |
-     | dt{ZWSP}.entity{ZWSP}.host | HOST-1 |
-     | dt{ZWSP}.entity{ZWSP}.process\\_group\\_instance | PGI-1 |
-     | dt{ZWSP}.entity{ZWSP}.custom\\_device | CD-1 |
-     | dt{ZWSP}.entity{ZWSP}.aws\\_lambda\\_function | AWS\\_LAMBDA-1 |
-
-     ### Fields
-
-     | Field | Value |
-     |---|---|
-     | host{ZWSP}.name | HOST-1 |
-     | dt{ZWSP}.host\\_group{ZWSP}.id | hg-1 |
-     | cloud{ZWSP}.provider | aws |
-     | cloud{ZWSP}.region | eu-west-1 |
-     | aws{ZWSP}.availability\\_zone | eu-west-1a |
-     | cloud{ZWSP}.account{ZWSP}.id | 123456789012 |
-     | aws{ZWSP}.arn | arn:aws:lambda:eu-west-1:123:function:x |
-     | faas{ZWSP}.name | fn |
-     | faas{ZWSP}.version | $LATEST |
-     | faas{ZWSP}.id | fid |
-     | k8s{ZWSP}.cluster{ZWSP}.name | c1 |
-     | k8s{ZWSP}.namespace{ZWSP}.name | ns |
-     | k8s{ZWSP}.node{ZWSP}.name | node-1 |
-     | k8s{ZWSP}.pod{ZWSP}.uid | pod-uid |
-     | dt{ZWSP}.app{ZWSP}.name | shop |
-     | dt{ZWSP}.app{ZWSP}.version | 1{ZWSP}.2{ZWSP}.3 |
-     | dt{ZWSP}.process{ZWSP}.name | java-app |
-     | process{ZWSP}.technology | JAVA, TOMCAT |
-     | log{ZWSP}.source | /var/log/app{ZWSP}.log |
-     | OperatorVersion | v1 |
-     | dt{ZWSP}.openpipeline{ZWSP}.source | oneagent |
-     | dt{ZWSP}.openpipeline{ZWSP}.pipelines | logs:default |
-     | dt{ZWSP}.auth{ZWSP}.origin | token |
-     | event{ZWSP}.type | LOG |
-     | dt{ZWSP}.environment{ZWSP}.id | staging |
-
-     ### DQL Filter *(⌘D to copy)*
+     ### DQL Filter *(⌘⇧Q to copy)*
 
      \`\`\`
      fetch logs
@@ -266,6 +255,12 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": {
+                       "dark": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjRkY2MzY5IiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0ZGNjM2OSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOSA5bDYgNk0xNSA5bC02IDYiIGNsYXNzPSJhcyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY2MzY5IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvZz48L3N2Zz4=",
+                       "light": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjRDkyRDNBIiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0Q5MkQzQSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOSA5bDYgNk0xNSA5bC02IDYiIGNsYXNzPSJhcyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDkyRDNBIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvZz48L3N2Zz4=",
+                     },
+                   },
                    "text": "ERROR",
                    "title": "Level",
                  },
@@ -273,6 +268,10 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Timestamp",
                  },
@@ -283,24 +282,24 @@ describe("LogDetail", () => {
                  "type": "Detail.Metadata.Separator",
                },
                {
-                 "children": [
-                   {
-                     "props": {
-                       "color": "raycast-color-blue",
-                       "text": "checkout",
-                     },
-                     "type": "Detail.Metadata.TagList.Item",
-                   },
-                 ],
                  "props": {
-                   "title": "Service",
+                   "icon": {
+                     "source": "icon-gear",
+                     "tintColor": undefined,
+                   },
+                   "text": "java-app",
+                   "title": "Process",
                  },
-                 "type": "Detail.Metadata.TagList",
+                 "type": "Detail.Metadata.Label",
                },
                {
                  "props": {
-                   "text": "java-app",
-                   "title": "Process",
+                   "icon": {
+                     "source": "icon-app-window",
+                     "tintColor": undefined,
+                   },
+                   "text": "shop",
+                   "title": "App",
                  },
                  "type": "Detail.Metadata.Label",
                },
@@ -320,13 +319,39 @@ describe("LogDetail", () => {
                  "type": "Detail.Metadata.TagList",
                },
                {
+                 "props": {
+                   "icon": {
+                     "source": "icon-computer-chip",
+                     "tintColor": undefined,
+                   },
+                   "text": "HOST-1",
+                   "title": "Host",
+                 },
+                 "type": "Detail.Metadata.Label",
+               },
+               {
                  "props": {},
                  "type": "Detail.Metadata.Separator",
                },
                {
                  "props": {
-                   "text": "HOST-1",
-                   "title": "Host",
+                   "icon": {
+                     "source": "icon-cloud",
+                     "tintColor": "raycast-color-blue",
+                   },
+                   "text": "aws · eu-west-1",
+                   "title": "Cloud",
+                 },
+                 "type": "Detail.Metadata.Label",
+               },
+               {
+                 "props": {
+                   "icon": {
+                     "source": "icon-box",
+                     "tintColor": "raycast-color-blue",
+                   },
+                   "text": "ns · c1",
+                   "title": "Kubernetes",
                  },
                  "type": "Detail.Metadata.Label",
                },
@@ -345,9 +370,11 @@ describe("LogDetail", () => {
   it("renders a minimal entry without tenant or timeframe", () => {
     expect(render(entryOf({}, { level: "WARN", content: "" }))).toMatchInlineSnapshot(`
      {
-       "markdown": "
+       "markdown": "{SVG: Unknown service | }
 
-     ### DQL Filter *(⌘D to copy)*
+
+
+     ### DQL Filter *(⌘⇧Q to copy)*
 
      \`\`\`
      fetch logs
@@ -422,6 +449,12 @@ describe("LogDetail", () => {
              "children": [
                {
                  "props": {
+                   "icon": {
+                     "source": {
+                       "dark": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjRkZCMjI0IiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48cGF0aCBkPSJNMTIgNEwyMSAxOUgzWiIgY2xhc3M9ImFzIiBmaWxsPSJub25lIiBzdHJva2U9IiNGRkIyMjQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEyIDEwdjQiIGNsYXNzPSJhcyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkZCMjI0IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTYuNiIgcj0iMSIgY2xhc3M9ImFmIiBmaWxsPSIjRkZCMjI0Ii8+PC9nPjwvc3ZnPg==",
+                       "light": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjQzc3NzAwIiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48cGF0aCBkPSJNMTIgNEwyMSAxOUgzWiIgY2xhc3M9ImFzIiBmaWxsPSJub25lIiBzdHJva2U9IiNDNzc3MDAiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBhdGggZD0iTTEyIDEwdjQiIGNsYXNzPSJhcyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjQzc3NzAwIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjxjaXJjbGUgY3g9IjEyIiBjeT0iMTYuNiIgcj0iMSIgY2xhc3M9ImFmIiBmaWxsPSIjQzc3NzAwIi8+PC9nPjwvc3ZnPg==",
+                     },
+                   },
                    "text": "WARN",
                    "title": "Level",
                  },
@@ -429,15 +462,18 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Timestamp",
                  },
                  "type": "Detail.Metadata.Label",
                },
-               {
-                 "props": {},
-                 "type": "Detail.Metadata.Separator",
-               },
+               "",
+               "",
+               "",
              ],
              "props": {},
              "type": "Detail.Metadata",
@@ -455,7 +491,7 @@ describe("LogDetail", () => {
       {
         "dt.app.name": "shop",
         "host.name": "web-1",
-        "dt.environment.id": "production",
+        "deployment.environment": "production",
         span_id: "span-9",
         "aws.region": "us-east-1",
         "aws.account.id": "999",
@@ -464,23 +500,15 @@ describe("LogDetail", () => {
     );
     expect(render(entry, tenant, "now-24h")).toMatchInlineSnapshot(`
      {
-       "markdown": "\`\`\`
+       "markdown": "{SVG: shop | }
+
+     \`\`\`
      hello
      \`\`\`
 
-     ### Fields
+     {SVG: INFRASTRUCTURE | cloud.account.id | 999 | TELEMETRY | span_id | span-9}
 
-     | Field | Value |
-     |---|---|
-     | host{ZWSP}.name | web-1 |
-     | cloud{ZWSP}.region | us-east-1 |
-     | cloud{ZWSP}.account{ZWSP}.id | 999 |
-     | dt{ZWSP}.app{ZWSP}.name | shop |
-     | trace\\_id | trace-abc |
-     | span\\_id | span-9 |
-     | dt{ZWSP}.environment{ZWSP}.id | production |
-
-     ### DQL Filter *(⌘D to copy)*
+     ### DQL Filter *(⌘⇧Q to copy)*
 
      \`\`\`
      fetch logs
@@ -494,7 +522,7 @@ describe("LogDetail", () => {
      {
        "dt.app.name": "shop",
        "host.name": "web-1",
-       "dt.environment.id": "production",
+       "deployment.environment": "production",
        "span_id": "span-9",
        "aws.region": "us-east-1",
        "aws.account.id": "999"
@@ -630,6 +658,12 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": {
+                       "dark": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjNENDMzhBIiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRDQzM4QSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOCAxMi41bDIuNyAyLjdMMTYgOS41IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzRDQzM4QSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L2c+PC9zdmc+",
+                       "light": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjMUY4QTRDIiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFGOEE0QyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOCAxMi41bDIuNyAyLjdMMTYgOS41IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzFGOEE0QyIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L2c+PC9zdmc+",
+                     },
+                   },
                    "text": "INFO",
                    "title": "Level",
                  },
@@ -637,6 +671,10 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Timestamp",
                  },
@@ -648,6 +686,10 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-app-window",
+                     "tintColor": undefined,
+                   },
                    "text": "shop",
                    "title": "App",
                  },
@@ -669,11 +711,11 @@ describe("LogDetail", () => {
                  "type": "Detail.Metadata.TagList",
                },
                {
-                 "props": {},
-                 "type": "Detail.Metadata.Separator",
-               },
-               {
                  "props": {
+                   "icon": {
+                     "source": "icon-computer-chip",
+                     "tintColor": undefined,
+                   },
                    "text": "web-1",
                    "title": "Host",
                  },
@@ -685,9 +727,25 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-cloud",
+                     "tintColor": "raycast-color-blue",
+                   },
+                   "text": "us-east-1",
+                   "title": "Cloud",
+                 },
+                 "type": "Detail.Metadata.Label",
+               },
+               "",
+               {
+                 "props": {},
+                 "type": "Detail.Metadata.Separator",
+               },
+               {
+                 "props": {
                    "target": "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.distributedtracing/explorer?filter=trace.id%3D%22trace-abc%22",
-                   "text": "Open in Explorer",
-                   "title": "Distributed Trace",
+                   "text": "trace-abc",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Link",
                },
@@ -707,18 +765,13 @@ describe("LogDetail", () => {
     const entry = entryOf({ "dt.process.name": "proc" }, { level: "DEBUG", status: "FAILED", traceId: "t-1" });
     expect(render(entry)).toMatchInlineSnapshot(`
      {
-       "markdown": "\`\`\`
+       "markdown": "{SVG: Unknown service | }
+
+     \`\`\`
      hello
      \`\`\`
 
-     ### Fields
-
-     | Field | Value |
-     |---|---|
-     | dt{ZWSP}.process{ZWSP}.name | proc |
-     | trace\\_id | t-1 |
-
-     ### DQL Filter *(⌘D to copy)*
+     ### DQL Filter *(⌘⇧Q to copy)*
 
      \`\`\`
      fetch logs
@@ -842,6 +895,12 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": {
+                       "dark": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjRkY2MzY5IiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0ZGNjM2OSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOSA5bDYgNk0xNSA5bC02IDYiIGNsYXNzPSJhcyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRkY2MzY5IiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvZz48L3N2Zz4=",
+                       "light": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMiIgaGVpZ2h0PSIzMiIgdmlld0JveD0iMCAwIDMyIDMyIj48cmVjdCB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHJ4PSI4IiBmaWxsPSIjRDkyRDNBIiBmaWxsLW9wYWNpdHk9IjAuMTYiLz48ZyB0cmFuc2Zvcm09InRyYW5zbGF0ZSg0IDQpIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI5IiBjbGFzcz0iYXMiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0Q5MkQzQSIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48cGF0aCBkPSJNOSA5bDYgNk0xNSA5bC02IDYiIGNsYXNzPSJhcyIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDkyRDNBIiBzdHJva2Utd2lkdGg9IjIiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCIvPjwvZz48L3N2Zz4=",
+                     },
+                   },
                    "text": "DEBUG",
                    "title": "Level",
                  },
@@ -849,6 +908,10 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Timestamp",
                  },
@@ -860,8 +923,30 @@ describe("LogDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-gear",
+                     "tintColor": undefined,
+                   },
                    "text": "proc",
                    "title": "Process",
+                 },
+                 "type": "Detail.Metadata.Label",
+               },
+               "",
+               "",
+               "",
+               {
+                 "props": {},
+                 "type": "Detail.Metadata.Separator",
+               },
+               {
+                 "props": {
+                   "icon": {
+                     "source": "icon-link",
+                     "tintColor": "raycast-color-green",
+                   },
+                   "text": "t-1",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Label",
                },

@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, useNavigation, Keyboard } from "@raycast/api";
 import { useMemo, useState } from "react";
 import type { TenantConfig } from "../../../sdk/auth";
 import {
@@ -12,6 +12,7 @@ import { liveTransport } from "../../../sdk";
 import { useActiveTenant, useTenantQuery } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
+import { severityIcon, severityOf } from "../../lib/svg";
 import { pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
 import { listSectionSubtitle, listSectionTitle } from "../../lib/sectionTitle";
 import TenantActions from "../../components/TenantActions";
@@ -28,44 +29,18 @@ interface CommandArguments {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const STATUS_COLORS: Record<string, Color> = {
-  ERROR: Color.Red,
-  OK: Color.Green,
-  UNSET: Color.SecondaryText,
-};
-
-function statusColor(code: string): Color {
-  return STATUS_COLORS[code.toUpperCase()] ?? Color.SecondaryText;
-}
-
-function kindIcon(kind: string): Icon {
-  switch (kind.toLowerCase()) {
-    case "server":
-      return Icon.ArrowDown;
-    case "client":
-      return Icon.ArrowUp;
-    case "producer":
-      return Icon.Upload;
-    case "consumer":
-      return Icon.Download;
-    default:
-      return Icon.Dot;
-  }
-}
-
 function SpanItem(props: { entry: SpanEntry; onOpen: () => void; listActions: ActionPanel.Props["children"] }) {
   const { entry } = props;
   const duration = entry.durationUs != null ? formatDuration(entry.durationUs) : undefined;
-  const durationSuffix = duration !== undefined ? ` · ${duration}` : "";
+  const service = entry.service ?? "Unknown service";
   return (
     <List.Item
-      icon={{ source: kindIcon(entry.kind), tintColor: statusColor(entry.statusCode) }}
+      icon={{ value: severityIcon(severityOf(entry.statusCode)), tooltip: `${entry.statusCode} · ${entry.kind}` }}
       title={{
-        value: `${entry.service ?? "Unknown service"}${durationSuffix}`,
-        tooltip: duration !== undefined ? `Duration: ${duration}` : undefined,
+        value: duration !== undefined ? `${duration} · ${service}` : service,
+        tooltip: new Date(entry.startTime).toLocaleString(),
       }}
-      subtitle={entry.name.length > 55 ? entry.name.slice(0, 52) + "…" : entry.name}
-      accessories={[{ tag: { value: entry.statusCode, color: statusColor(entry.statusCode) } }]}
+      subtitle={entry.name.length > 120 ? entry.name.slice(0, 117) + "…" : entry.name}
       actions={
         <ActionPanel>
           <Action title="Open Details" icon={Icon.ArrowRight} onAction={props.onOpen} />
@@ -196,7 +171,7 @@ export default function SearchTraces(props: {
                 <Action
                   title="Refresh"
                   icon={Icon.ArrowClockwise}
-                  shortcut={{ modifiers: ["cmd"], key: "r" }}
+                  shortcut={Keyboard.Shortcut.Common.Refresh}
                   onAction={() => revalidate()}
                 />
                 {timeframeActions}

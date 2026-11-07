@@ -1,4 +1,4 @@
-import { List, ActionPanel, Action, Icon, Color, useNavigation } from "@raycast/api";
+import { List, ActionPanel, Action, Icon, useNavigation, Keyboard } from "@raycast/api";
 import { useState } from "react";
 import type { TenantConfig } from "../../../sdk/auth";
 import {
@@ -13,6 +13,7 @@ import { liveTransport } from "../../../sdk";
 import { useActiveTenant, useDebouncedValue, usePagedLimit, useTenantQuery } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
+import { logSeverity, severityIcon } from "../../lib/svg";
 import {
   LOG_LEVELS,
   pickLevel,
@@ -36,22 +37,6 @@ interface CommandArguments {
 /** Server-side search runs a billable query, so wait for the user to stop typing. */
 const SEARCH_DEBOUNCE_MS = 500;
 
-// Dynatrace `status` field values (aggregated loglevel):
-//   ERROR → SEVERE | ERROR | CRITICAL | ALERT | FATAL | EMERGENCY
-//   WARN  → WARN
-//   INFO  → INFO | DEBUG | NOTICE | TRACE
-//   NONE  → NONE
-const LEVEL_COLORS: Record<string, Color> = {
-  ERROR: Color.Red,
-  WARN: Color.Yellow,
-  INFO: Color.Blue,
-  NONE: Color.SecondaryText,
-};
-
-function levelColor(level: string): Color {
-  return LEVEL_COLORS[level.toUpperCase()] ?? Color.SecondaryText;
-}
-
 function relativeTime(timestamp: string): string {
   // Clamp: clock skew between machine and Dynatrace can put a timestamp in the future.
   const diffMin = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 60_000));
@@ -63,21 +48,19 @@ function relativeTime(timestamp: string): string {
 function logSubtitle(content: string): string {
   // Strip leading [service-name] prefix since the title already shows the service
   const stripped = content.replace(/^\[[^\]]+\]\s*/, "");
-  return stripped.length > 55 ? stripped.slice(0, 52) + "…" : stripped;
+  return stripped.length > 120 ? stripped.slice(0, 117) + "…" : stripped;
 }
 
 function LogItem(props: { entry: LogEntry; onOpen: () => void; listActions: ActionPanel.Props["children"] }) {
   const { entry } = props;
-  const status = entry.status ?? entry.level;
   return (
     <List.Item
-      icon={{ source: Icon.Document, tintColor: levelColor(entry.level) }}
+      icon={{ value: severityIcon(logSeverity(entry.status, entry.level)), tooltip: entry.status || entry.level }}
       title={{
-        value: `${entry.service ?? "Unknown service"} · ${relativeTime(entry.timestamp)}`,
-        tooltip: entry.timestamp,
+        value: `${relativeTime(entry.timestamp)} · ${entry.service ?? "Unknown service"}`,
+        tooltip: new Date(entry.timestamp).toLocaleString(),
       }}
       subtitle={logSubtitle(entry.content)}
-      accessories={[{ tag: { value: status, color: levelColor(status) } }]}
       actions={
         <ActionPanel>
           <Action title="Open Details" icon={Icon.ArrowRight} onAction={props.onOpen} />
@@ -150,7 +133,7 @@ export default function SearchLogs(props: { arguments: CommandArguments }) {
       <Action
         title="Refresh"
         icon={Icon.ArrowClockwise}
-        shortcut={{ modifiers: ["cmd"], key: "r" }}
+        shortcut={Keyboard.Shortcut.Common.Refresh}
         onAction={() => revalidate()}
       />
       {canLoadMore && (

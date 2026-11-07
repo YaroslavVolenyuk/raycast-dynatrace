@@ -12,7 +12,30 @@ jest.mock("@raycast/api", () => ({
   ...jest
     .requireActual<typeof import("../../../__tests__/raycastTree")>("../../../__tests__/raycastTree")
     .raycastStubs(),
+  Icon: {
+    Globe: "icon-globe",
+    HardDrive: "icon-hard-drive",
+    Stopwatch: "icon-stopwatch",
+    Clock: "icon-clock",
+    Flag: "icon-flag",
+    Link: "icon-link",
+    ArrowDown: "icon-arrow-down",
+    ArrowUp: "icon-arrow-up",
+    Upload: "icon-upload",
+    Download: "icon-download",
+    Dot: "icon-dot",
+  },
 }));
+
+/** Spells an embedded SVG out as its text nodes, so snapshots pin the content without the base64. */
+function svgText(b64: string): string {
+  const texts = [
+    ...Buffer.from(b64, "base64")
+      .toString()
+      .matchAll(/<text[^>]*>([^<]*)<\/text>/g),
+  ].map((m) => m[1]);
+  return `{SVG: ${texts.join(" | ")}}`;
+}
 
 function render(record: Partial<SpanRecord>, tenant?: TenantConfig) {
   const entry = normalizeSpan({
@@ -25,7 +48,12 @@ function render(record: Partial<SpanRecord>, tenant?: TenantConfig) {
   if (typeof tree === "string") throw new Error("unexpected text root");
   const { markdown, ...rest } = tree.props;
   // Zero-width spaces (autolink suppression) are spelled out so the snapshot stays lint-clean.
-  return { markdown: (markdown as string).replaceAll("​", "{ZWSP}"), tree: { ...tree, props: rest } };
+  return {
+    markdown: (markdown as string)
+      .replaceAll("​", "{ZWSP}")
+      .replace(/!\[\]\(data:image\/svg\+xml;base64,([A-Za-z0-9+/=]+)\)/g, (_, b64) => svgText(b64)),
+    tree: { ...tree, props: rest },
+  };
 }
 
 const tenant = { tenantEndpoint: "https://abc123.apps.dynatrace.com/" } as TenantConfig;
@@ -66,47 +94,9 @@ describe("TraceDetail", () => {
       ),
     ).toMatchInlineSnapshot(`
      {
-       "markdown": "### Span
+       "markdown": "{SVG: GET /orders | checkout}
 
-     | Field | Value |
-     |---|---|
-     | trace{ZWSP}.id | trace-1 |
-     | span{ZWSP}.id | span-1 |
-     | span{ZWSP}.parent\\_id | span-0 |
-     | span{ZWSP}.kind | server |
-     | service{ZWSP}.name | checkout |
-     | endpoint{ZWSP}.name | orders |
-     | duration | 182ms |
-
-     ### HTTP
-
-     | Field | Value |
-     |---|---|
-     | http{ZWSP}.request{ZWSP}.method | GET |
-     | url{ZWSP}.path | /orders |
-     | http{ZWSP}.route | /orders/{id} |
-     | http{ZWSP}.response{ZWSP}.status\\_code | 200 |
-     | server{ZWSP}.address | shop{ZWSP}.example{ZWSP}.com |
-     | server{ZWSP}.port | 443 |
-
-     ### Database
-
-     | Field | Value |
-     |---|---|
-     | db{ZWSP}.system | postgresql |
-     | db{ZWSP}.operation{ZWSP}.name | SELECT |
-     | db{ZWSP}.namespace | orders |
-     | db{ZWSP}.collection{ZWSP}.name | order\\_items |
-     | server{ZWSP}.address | shop{ZWSP}.example{ZWSP}.com |
-     | server{ZWSP}.port | 443 |
-
-     ### RPC
-
-     | Field | Value |
-     |---|---|
-     | rpc{ZWSP}.system | grpc |
-     | rpc{ZWSP}.service | Orders |
-     | rpc{ZWSP}.method | List |
+     {SVG: SPAN | trace.id | trace-1 | span.id | span-1 | span.parent_id | span-0 | endpoint.name | orders | HTTP | http.route | /orders/{id} | server.address | shop.example.com | server.port | 443 | DATABASE | db.namespace | orders | db.collection.name | order_items | server.address | shop.example.com | server.port | 443 | RPC | rpc.system | grpc | rpc.service | Orders | rpc.method | List}
 
      ### Raw Fields
 
@@ -213,6 +203,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-arrow-down",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "server",
                    "title": "Kind",
                  },
@@ -220,6 +214,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-stopwatch",
+                     "tintColor": undefined,
+                   },
                    "text": "182ms",
                    "title": "Duration",
                  },
@@ -227,6 +225,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Start Time",
                  },
@@ -237,26 +239,11 @@ describe("TraceDetail", () => {
                  "type": "Detail.Metadata.Separator",
                },
                {
-                 "children": [
-                   {
-                     "props": {
-                       "color": "raycast-color-blue",
-                       "text": "checkout",
-                     },
-                     "type": "Detail.Metadata.TagList.Item",
+                 "props": {
+                   "icon": {
+                     "source": "icon-globe",
+                     "tintColor": "raycast-color-blue",
                    },
-                 ],
-                 "props": {
-                   "title": "Service",
-                 },
-                 "type": "Detail.Metadata.TagList",
-               },
-               {
-                 "props": {},
-                 "type": "Detail.Metadata.Separator",
-               },
-               {
-                 "props": {
                    "text": "GET /orders",
                    "title": "Request",
                  },
@@ -275,6 +262,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-hard-drive",
+                     "tintColor": "raycast-color-blue",
+                   },
                    "text": "postgresql",
                    "title": "DB System",
                  },
@@ -294,8 +285,8 @@ describe("TraceDetail", () => {
                {
                  "props": {
                    "target": "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.distributedtracing/explorer?filter=trace.id%3D%22trace-1%22",
-                   "text": "Open in Explorer",
-                   "title": "Distributed Trace",
+                   "text": "trace-1",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Link",
                },
@@ -314,14 +305,9 @@ describe("TraceDetail", () => {
   it("renders a minimal root span without tenant", () => {
     expect(render({})).toMatchInlineSnapshot(`
      {
-       "markdown": "### Span
+       "markdown": "{SVG: span-1 | Unknown service}
 
-     | Field | Value |
-     |---|---|
-     | trace{ZWSP}.id | trace-1 |
-     | span{ZWSP}.id | span-1 |
-     | span{ZWSP}.kind | internal |
-     | duration | — |
+     {SVG: SPAN | trace.id | trace-1 | span.id | span-1}
 
      ### Raw Fields
 
@@ -387,6 +373,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-dot",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "internal",
                    "title": "Kind",
                  },
@@ -394,6 +384,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-stopwatch",
+                     "tintColor": undefined,
+                   },
                    "text": "—",
                    "title": "Duration",
                  },
@@ -401,8 +395,23 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Start Time",
+                 },
+                 "type": "Detail.Metadata.Label",
+               },
+               {
+                 "props": {
+                   "icon": {
+                     "source": "icon-flag",
+                     "tintColor": "raycast-color-green",
+                   },
+                   "text": "Yes",
+                   "title": "Root Span",
                  },
                  "type": "Detail.Metadata.Label",
                },
@@ -412,8 +421,12 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
-                   "text": "Yes",
-                   "title": "Root Span",
+                   "icon": {
+                     "source": "icon-link",
+                     "tintColor": "raycast-color-green",
+                   },
+                   "text": "trace-1",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Label",
                },
@@ -447,30 +460,9 @@ describe("TraceDetail", () => {
       ),
     ).toMatchInlineSnapshot(`
      {
-       "markdown": "### Span
+       "markdown": "{SVG: GET | api}
 
-     | Field | Value |
-     |---|---|
-     | trace{ZWSP}.id | trace-1 |
-     | span{ZWSP}.id | span-1 |
-     | span{ZWSP}.kind | client |
-     | service{ZWSP}.name | api |
-     | duration | 5{ZWSP}.0s |
-     | status{ZWSP}.message | boom \\| \\\`bad\\\` |
-
-     ### HTTP
-
-     | Field | Value |
-     |---|---|
-     | http{ZWSP}.request{ZWSP}.method | POST |
-     | http{ZWSP}.response{ZWSP}.status\\_code | 500 |
-
-     ### Database
-
-     | Field | Value |
-     |---|---|
-     | db{ZWSP}.system | redis |
-     | db{ZWSP}.operation{ZWSP}.name | GET |
+     {SVG: SPAN | trace.id | trace-1 | span.id | span-1 | status.message | boom | \`bad\`}
 
      ### Raw Fields
 
@@ -566,6 +558,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-arrow-up",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "client",
                    "title": "Kind",
                  },
@@ -573,6 +569,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-stopwatch",
+                     "tintColor": undefined,
+                   },
                    "text": "5.0s",
                    "title": "Duration",
                  },
@@ -580,32 +580,21 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Start Time",
                  },
                  "type": "Detail.Metadata.Label",
                },
                {
-                 "props": {},
-                 "type": "Detail.Metadata.Separator",
-               },
-               {
-                 "children": [
-                   {
-                     "props": {
-                       "color": "raycast-color-blue",
-                       "text": "api",
-                     },
-                     "type": "Detail.Metadata.TagList.Item",
+                 "props": {
+                   "icon": {
+                     "source": "icon-flag",
+                     "tintColor": "raycast-color-green",
                    },
-                 ],
-                 "props": {
-                   "title": "Service",
-                 },
-                 "type": "Detail.Metadata.TagList",
-               },
-               {
-                 "props": {
                    "text": "Yes",
                    "title": "Root Span",
                  },
@@ -614,6 +603,17 @@ describe("TraceDetail", () => {
                {
                  "props": {},
                  "type": "Detail.Metadata.Separator",
+               },
+               {
+                 "props": {
+                   "icon": {
+                     "source": "icon-globe",
+                     "tintColor": "raycast-color-blue",
+                   },
+                   "text": "POST",
+                   "title": "Request",
+                 },
+                 "type": "Detail.Metadata.Label",
                },
                {
                  "props": {
@@ -628,8 +628,19 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-hard-drive",
+                     "tintColor": "raycast-color-blue",
+                   },
                    "text": "redis",
                    "title": "DB System",
+                 },
+                 "type": "Detail.Metadata.Label",
+               },
+               {
+                 "props": {
+                   "text": "GET",
+                   "title": "Operation",
                  },
                  "type": "Detail.Metadata.Label",
                },
@@ -640,8 +651,8 @@ describe("TraceDetail", () => {
                {
                  "props": {
                    "target": "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.distributedtracing/explorer?filter=trace.id%3D%22trace-1%22",
-                   "text": "Open in Explorer",
-                   "title": "Distributed Trace",
+                   "text": "trace-1",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Link",
                },
@@ -660,13 +671,9 @@ describe("TraceDetail", () => {
   it("keeps the trace links for an empty trace ID", () => {
     expect(render({ "trace.id": "" }, tenant)).toMatchInlineSnapshot(`
      {
-       "markdown": "### Span
+       "markdown": "{SVG: span-1 | Unknown service}
 
-     | Field | Value |
-     |---|---|
-     | span{ZWSP}.id | span-1 |
-     | span{ZWSP}.kind | internal |
-     | duration | — |
+     {SVG: SPAN | span.id | span-1}
 
      ### Raw Fields
 
@@ -753,6 +760,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-dot",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "internal",
                    "title": "Kind",
                  },
@@ -760,6 +771,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-stopwatch",
+                     "tintColor": undefined,
+                   },
                    "text": "—",
                    "title": "Duration",
                  },
@@ -767,17 +782,21 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Start Time",
                  },
                  "type": "Detail.Metadata.Label",
                },
                {
-                 "props": {},
-                 "type": "Detail.Metadata.Separator",
-               },
-               {
                  "props": {
+                   "icon": {
+                     "source": "icon-flag",
+                     "tintColor": "raycast-color-green",
+                   },
                    "text": "Yes",
                    "title": "Root Span",
                  },
@@ -790,8 +809,8 @@ describe("TraceDetail", () => {
                {
                  "props": {
                    "target": "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.distributedtracing/explorer?filter=trace.id%3D%22%22",
-                   "text": "Open in Explorer",
-                   "title": "Distributed Trace",
+                   "text": "",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Link",
                },
@@ -811,20 +830,9 @@ describe("TraceDetail", () => {
     expect(render({ "rpc.method": "Ping", "endpoint.name": "N/A", "server.address": "N/A" }, tenant))
       .toMatchInlineSnapshot(`
      {
-       "markdown": "### Span
+       "markdown": "{SVG: span-1 | Unknown service}
 
-     | Field | Value |
-     |---|---|
-     | trace{ZWSP}.id | trace-1 |
-     | span{ZWSP}.id | span-1 |
-     | span{ZWSP}.kind | internal |
-     | duration | — |
-
-     ### RPC
-
-     | Field | Value |
-     |---|---|
-     | rpc{ZWSP}.method | Ping |
+     {SVG: SPAN | trace.id | trace-1 | span.id | span-1 | RPC | rpc.method | Ping}
 
      ### Raw Fields
 
@@ -914,6 +922,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-dot",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "internal",
                    "title": "Kind",
                  },
@@ -921,6 +933,10 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-stopwatch",
+                     "tintColor": undefined,
+                   },
                    "text": "—",
                    "title": "Duration",
                  },
@@ -928,17 +944,21 @@ describe("TraceDetail", () => {
                },
                {
                  "props": {
+                   "icon": {
+                     "source": "icon-clock",
+                     "tintColor": "raycast-color-secondary",
+                   },
                    "text": "2026-01-02T03:04:05.000Z",
                    "title": "Start Time",
                  },
                  "type": "Detail.Metadata.Label",
                },
                {
-                 "props": {},
-                 "type": "Detail.Metadata.Separator",
-               },
-               {
                  "props": {
+                   "icon": {
+                     "source": "icon-flag",
+                     "tintColor": "raycast-color-green",
+                   },
                    "text": "Yes",
                    "title": "Root Span",
                  },
@@ -951,8 +971,8 @@ describe("TraceDetail", () => {
                {
                  "props": {
                    "target": "https://abc123.apps.dynatrace.com/ui/apps/dynatrace.distributedtracing/explorer?filter=trace.id%3D%22trace-1%22",
-                   "text": "Open in Explorer",
-                   "title": "Distributed Trace",
+                   "text": "trace-1",
+                   "title": "Trace",
                  },
                  "type": "Detail.Metadata.Link",
                },

@@ -1,4 +1,4 @@
-import { List, Detail, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
+import { List, Detail, ActionPanel, Action, Icon, environment, useNavigation, Keyboard } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import { useMemo, useRef, useState } from "react";
 import { liveTransport, type TenantConfig } from "../../../sdk";
@@ -9,12 +9,21 @@ import {
   findTimeColumn,
   formatCell,
   pickTitleColumn,
-  recordMarkdownTable,
+  recordFieldGroup,
   recordMatches,
   summarizeRecord,
   toCsv,
 } from "../../lib/dqlRecord";
 import { fenceCode } from "../../lib/markdown";
+import {
+  FULL_WIDTH,
+  headerMarkdown,
+  keyValueGroupsMarkdown,
+  logSeverity,
+  severityIcon,
+  severityOf,
+  type Severity,
+} from "../../lib/svg";
 import { timeframeLabel } from "./timeframes";
 
 interface DqlResultsProps {
@@ -26,6 +35,44 @@ interface DqlResultsProps {
 }
 
 const EMPTY_RESULT: DqlResult = { records: [], columns: [], truncated: false, notices: [] };
+
+/** Records that carry a log level or a status get its severity; everything else is neutral. */
+function recordSeverity(record: Record<string, unknown>): Severity {
+  const text = (key: string) => (typeof record[key] === "string" ? (record[key] as string) : undefined);
+  const severity = logSeverity(text("status"), text("loglevel"));
+  return severity === "none" ? severityOf(text("span.status_code")) : severity;
+}
+
+/** Built when the record is opened, not per list row: the SVG cards are only needed for the one record on screen. */
+function RecordDetail(props: {
+  record: Record<string, unknown>;
+  columns: readonly string[];
+  position: number;
+  title: string;
+  subtitle: string;
+  json: string;
+}) {
+  const { record, columns, position, title, subtitle, json } = props;
+  const dark = environment.appearance === "dark";
+  const markdown = [
+    headerMarkdown({ severity: recordSeverity(record), title, subtitle }, dark, FULL_WIDTH),
+    keyValueGroupsMarkdown([recordFieldGroup(record, columns)], dark, FULL_WIDTH),
+    fenceCode(json, "json"),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  return (
+    <Detail
+      navigationTitle={`Record ${position}`}
+      markdown={markdown}
+      actions={
+        <ActionPanel>
+          <Action.CopyToClipboard title="Copy Record as JSON" content={json} />
+        </ActionPanel>
+      }
+    />
+  );
+}
 
 function formatTime(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -65,10 +112,10 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
       <Action
         title="Rerun Query"
         icon={Icon.ArrowClockwise}
-        shortcut={{ modifiers: ["cmd"], key: "r" }}
+        shortcut={Keyboard.Shortcut.Common.Refresh}
         onAction={revalidate}
       />
-      <Action title="Edit Query" icon={Icon.Pencil} shortcut={{ modifiers: ["cmd"], key: "e" }} onAction={pop} />
+      <Action title="Edit Query" icon={Icon.Pencil} shortcut={Keyboard.Shortcut.Common.Edit} onAction={pop} />
       <Action.CopyToClipboard title="Copy DQL" content={query} shortcut={{ modifiers: ["cmd", "shift"], key: "q" }} />
     </ActionPanel.Section>
   );
@@ -127,7 +174,7 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
           return (
             <List.Item
               key={index}
-              icon={Icon.Document}
+              icon={severityIcon(recordSeverity(record))}
               title={titleColumn ? formatCell(record[titleColumn], 80) : `Record ${index + 1}`}
               subtitle={showDetail ? undefined : summarizeRecord(record, result.columns, [titleColumn, timeColumn])}
               accessories={time && !showDetail ? [{ text: time }] : undefined}
@@ -150,14 +197,13 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
                     title="Show Record"
                     icon={Icon.Eye}
                     target={
-                      <Detail
-                        navigationTitle={`Record ${index + 1}`}
-                        markdown={`${recordMarkdownTable(record, result.columns)}\n\n${fenceCode(json, "json")}`}
-                        actions={
-                          <ActionPanel>
-                            <Action.CopyToClipboard title="Copy Record as JSON" content={json} />
-                          </ActionPanel>
-                        }
+                      <RecordDetail
+                        record={record}
+                        columns={result.columns}
+                        position={index + 1}
+                        title={titleColumn ? formatCell(record[titleColumn], 80) : `Record ${index + 1}`}
+                        subtitle={time ?? `Record ${index + 1}`}
+                        json={json}
                       />
                     }
                   />
@@ -177,7 +223,7 @@ export default function DqlResults({ tenant, query, timeframeKey }: DqlResultsPr
                     <Action.CopyToClipboard
                       title="Copy All as CSV"
                       content={allCsv}
-                      shortcut={{ modifiers: ["cmd", "shift"], key: "c" }}
+                      shortcut={Keyboard.Shortcut.Common.Copy}
                     />
                   </ActionPanel.Section>
                   {queryActions}

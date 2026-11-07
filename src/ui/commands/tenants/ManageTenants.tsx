@@ -14,6 +14,7 @@ import {
   showToast,
   Toast,
   useNavigation,
+  Keyboard,
 } from "@raycast/api";
 import { usePromise } from "@raycast/utils";
 import type { TenantConfig } from "../../../sdk/auth";
@@ -21,6 +22,7 @@ import { testTenantConnection } from "../../../sdk";
 import { describeScopeCheck } from "./tenantForm.helpers";
 import { confirmAndDeleteTenant } from "./tenantActions";
 import { setActiveTenant, resetTenants, readTenantState } from "../../../services";
+import { severityIcon } from "../../lib/svg";
 import TenantForm from "./TenantForm";
 
 export default function ManageTenants() {
@@ -142,10 +144,7 @@ export default function ManageTenants() {
           return (
             <List.Item
               key={tenant.id}
-              icon={{
-                source: isActive ? Icon.CheckCircle : Icon.Circle,
-                tintColor: isActive ? Color.Green : Color.SecondaryText,
-              }}
+              icon={severityIcon(isActive ? "ok" : "none")}
               title={tenant.name}
               subtitle={tenant.tenantEndpoint}
               accessories={[
@@ -164,7 +163,7 @@ export default function ManageTenants() {
                     <Action
                       title="Edit Tenant"
                       icon={Icon.Pencil}
-                      shortcut={{ modifiers: ["cmd"], key: "e" }}
+                      shortcut={Keyboard.Shortcut.Common.Edit}
                       onAction={() => push(<TenantForm tenant={tenant} onSaved={revalidate} />)}
                     />
                     <Action
@@ -178,13 +177,13 @@ export default function ManageTenants() {
                     <Action
                       title="Add Tenant"
                       icon={Icon.Plus}
-                      shortcut={{ modifiers: ["cmd"], key: "n" }}
+                      shortcut={Keyboard.Shortcut.Common.New}
                       onAction={() => push(<TenantForm onSaved={revalidate} />)}
                     />
                     <Action.CopyToClipboard
                       title="Copy Environment URL"
                       content={tenant.tenantEndpoint}
-                      shortcut={{ modifiers: ["cmd"], key: "." }}
+                      shortcut={Keyboard.Shortcut.Common.Pin}
                     />
                   </ActionPanel.Section>
                   <ActionPanel.Section>

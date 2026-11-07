@@ -1,7 +1,7 @@
 // Rendering helpers for free-form DQL records (Run DQL). The record shape is
 // whatever the query returns, so everything here works on plain key/value maps.
 
-import { escapeCell } from "./markdown";
+import type { KeyValueGroup } from "./svg";
 
 /** Fields that make a good row title, in order of preference. */
 const TITLE_CANDIDATES = [
@@ -101,10 +101,14 @@ export function toCsv(records: readonly Record<string, unknown>[], columns: read
   return [columns.map(cell).join(","), ...records.map((r) => columns.map((c) => cell(r[c])).join(","))].join("\n");
 }
 
-/** Markdown table of all fields of one record; every key and value escaped. */
-export function recordMarkdownTable(record: Record<string, unknown>, columns: readonly string[]): string {
-  const rows = columns
-    .filter((c) => record[c] !== undefined)
-    .map((c) => `| ${escapeCell(c)} | ${escapeCell(formatCell(record[c], 300))} |`);
-  return ["| Field | Value |", "|---|---|", ...rows].join("\n");
+/** One group with every defined field of a record, values flattened to text (escaping is the SVG builder's job). */
+export function recordFieldGroup(
+  record: Record<string, unknown>,
+  columns: readonly string[],
+  title = "Fields",
+): KeyValueGroup {
+  return {
+    title,
+    rows: columns.filter((c) => record[c] !== undefined).map((c) => [c, formatCell(record[c], 500)] as const),
+  };
 }

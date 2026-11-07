@@ -1,4 +1,4 @@
-import { formatCell, pickTitleColumn, summarizeRecord, recordMatches, toCsv, recordMarkdownTable } from "../dqlRecord";
+import { formatCell, pickTitleColumn, summarizeRecord, recordMatches, toCsv, recordFieldGroup } from "../dqlRecord";
 
 describe("formatCell", () => {
   it("renders objects as JSON, not [object Object]", () => {
@@ -61,8 +61,14 @@ describe("toCsv", () => {
   });
 });
 
-describe("recordMarkdownTable", () => {
-  it("escapes pipes", () => {
-    expect(recordMarkdownTable({ q: "a | b" }, ["q"])).toContain("a \\| b");
+describe("recordFieldGroup", () => {
+  it("keeps defined fields in column order and flattens values", () => {
+    expect(recordFieldGroup({ b: { x: 1 }, a: "s", c: undefined }, ["a", "b", "c"], "Record")).toEqual({
+      title: "Record",
+      rows: [
+        ["a", "s"],
+        ["b", '{"x":1}'],
+      ],
+    });
   });
 });

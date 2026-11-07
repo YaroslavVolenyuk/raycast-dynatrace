@@ -1,12 +1,15 @@
-import { Detail, ActionPanel, Action, Color, Icon, useNavigation } from "@raycast/api";
+import { Detail, ActionPanel, Action, Color, Icon, environment, useNavigation, Keyboard } from "@raycast/api";
+import { keyValueGroupsMarkdown, headerMarkdown, severityIcon, logSeverity, type KeyValueGroup } from "../../lib/svg";
 import type { LogEntry } from "../../../sdk";
 import type { TenantConfig } from "../../../sdk";
 import { escapeDqlString } from "../../../sdk";
+import { recordFieldGroup } from "../../lib/dqlRecord";
 import { formatLogContent } from "../../lib/formatLogContent";
 import { buildTraceUrl } from "../../lib/deepLinks";
-import { keyValueTable, fenceCode } from "../../lib/markdown";
+import { fenceCode } from "../../lib/markdown";
+import { severityColor } from "../../lib/severityColor";
 import type { TimeframeValue } from "../../lib/listArgs";
-import { tenantBaseUrl, traceMetadataLink } from "../../components/TraceBlocks";
+import { tenantBaseUrl } from "../../components/TraceBlocks";
 import SearchTraces from "../search-traces/SearchTraces";
 import RunDql from "../run-dql/RunDql";
 
@@ -26,37 +29,10 @@ function valArray(v: unknown): string | undefined {
   return val(v);
 }
 
-// Status wins over level; both are matched upper-cased. Maps, not object
-// literals, so a value like "constructor" never hits the prototype.
-const STATUS_COLORS = new Map<string, Color>([
-  ["SUCCESS", Color.Green],
-  ["OK", Color.Green],
-  ["ERROR", Color.Red],
-  ["FAILED", Color.Red],
-  ["FAILURE", Color.Red],
-]);
-const LEVEL_COLORS = new Map<string, Color>([
-  ["WARN", Color.Yellow],
-  ["WARNING", Color.Yellow],
-  ["ERROR", Color.Red],
-  ["FATAL", Color.Red],
-  ["CRITICAL", Color.Red],
-  ["INFO", Color.Blue],
-]);
-
-function levelColor(level: string | undefined, status: string | undefined): Color {
-  return (
-    STATUS_COLORS.get(status?.toUpperCase() ?? "") ??
-    LEVEL_COLORS.get(level?.toUpperCase() ?? "") ??
-    Color.SecondaryText
-  );
-}
-
-function environmentColor(env: string | undefined): Color {
-  const e = env?.toLowerCase() ?? "";
+function environmentColor(env: string): Color {
+  const e = env.toLowerCase();
   if (e === "prod" || e === "production") return Color.Green;
-  if (e.includes("stag")) return Color.Yellow;
-  return Color.SecondaryText;
+  return e.includes("stag") ? Color.Yellow : Color.SecondaryText;
 }
 
 function buildLogContextQuery(raw: Record<string, unknown>, limit = 100): string {
@@ -96,67 +72,108 @@ const list =
 /** A markdown table row: the label, and how to read it (defaults to the raw field named by the label). */
 type Row = readonly [label: string, read?: Read];
 
-// Topology: entity refs
-const TOPOLOGY_ROWS: readonly Row[] = [
-  ["dt.source_entity", list("dt.source_entity")],
-  ["dt.entity.host"],
-  ["dt.entity.process_group_instance"],
-  ["dt.entity.custom_device"],
-  ["dt.entity.aws_lambda_function"],
+const GROUPS: ReadonlyArray<{ title: string; rows: readonly Row[] }> = [
+  {
+    title: "Topology",
+    rows: [
+      ["dt.source_entity", list("dt.source_entity")],
+      ["dt.entity.host"],
+      ["dt.entity.process_group_instance"],
+      ["dt.entity.custom_device"],
+      ["dt.entity.aws_lambda_function"],
+    ],
+  },
+  {
+    title: "Infrastructure",
+    rows: [
+      ["dt.host_group.id"],
+      ["aws.availability_zone"],
+      ["cloud.account.id", pick("aws.account.id", "cloud.account.id")],
+      ["aws.arn"],
+      ["dt.environment.id"],
+    ],
+  },
+  { title: "Serverless", rows: [["faas.name"], ["faas.version"], ["faas.id"]] },
+  {
+    title: "Kubernetes",
+    rows: [["k8s.node.name"], ["k8s.pod.uid"]],
+  },
+  {
+    title: "Application",
+    rows: [["dt.app.version"], ["process.technology", list("process.technology")], ["OperatorVersion"]],
+  },
+  {
+    title: "Pipeline",
+    rows: [
+      ["dt.openpipeline.source"],
+      ["dt.openpipeline.pipelines", list("dt.openpipeline.pipelines")],
+      ["dt.auth.origin", pick("dt.auth.origin", "dt.auth_origin")],
+    ],
+  },
+  {
+    title: "Telemetry",
+    rows: [["span_id"], ["event.type"]],
+  },
 ];
 
-// Fields section — Infrastructure, Cloud, FaaS, K8s, Process, Pipeline, Telemetry
-const FIELD_ROWS: readonly Row[] = [
-  ["host.name", pick("host.name", "dt.entity.host")],
-  ["dt.host_group.id"],
-  ["cloud.provider"],
-  ["cloud.region", pick("aws.region", "cloud.region")],
-  ["aws.availability_zone"],
-  ["cloud.account.id", pick("aws.account.id", "cloud.account.id")],
-  ["aws.arn"],
-
-  ["faas.name"],
-  ["faas.version"],
-  ["faas.id"],
-
-  ["k8s.cluster.name"],
-  ["k8s.namespace.name"],
-  ["k8s.node.name"],
-  ["k8s.pod.uid"],
-
-  ["dt.app.name"],
-  ["dt.app.version"],
-  ["dt.process.name", pick("dt.process.name", "dt.process_group.detected_name")],
-  ["process.technology", list("process.technology")],
-  ["log.source", (_, entry) => entry.source],
-  ["OperatorVersion"],
-
-  ["dt.openpipeline.source"],
-  ["dt.openpipeline.pipelines", list("dt.openpipeline.pipelines")],
-  ["dt.auth.origin", pick("dt.auth.origin", "dt.auth_origin")],
-
-  ["trace_id", (_, entry) => entry.traceId],
-  ["span_id"],
-
-  ["event.type"],
-  ["dt.environment.id", pick("dt.environment.id", "environment")],
+/** Raw fields that the header, the metadata pane or an alias in GROUPS already shows. */
+const SHOWN_ELSEWHERE = [
+  "timestamp",
+  "content",
+  "loglevel",
+  "status",
+  "service.name",
+  "dt.app.name",
+  "host.name",
+  "dt.process.name",
+  "dt.process_group.detected_name",
+  "log.source",
+  "trace_id",
+  "cloud.provider",
+  "cloud.region",
+  "aws.region",
+  "aws.account.id",
+  "k8s.cluster.name",
+  "k8s.namespace.name",
+  "deployment.environment",
+  "environment",
+  "dt.auth_origin",
 ];
 
-function rowTable(rows: readonly Row[], raw: Raw, entry: LogEntry): string {
-  return keyValueTable(rows.map(([label, read = pick(label)]) => [label, read(raw, entry)]));
+const KNOWN_KEYS = new Set([...SHOWN_ELSEWHERE, ...GROUPS.flatMap(({ rows }) => rows.map(([label]) => label))]);
+
+function fieldGroups(raw: Raw, entry: LogEntry): KeyValueGroup[] {
+  const groups = GROUPS.map(({ title, rows }) => ({
+    title,
+    rows: rows.flatMap(([label, read = pick(label)]) => {
+      const value = read(raw, entry);
+      return value ? [[label, value] as const] : [];
+    }),
+  }));
+  // Everything the mapping above does not know about (custom attributes, new semantic fields) still has to be visible.
+  const otherKeys = Object.keys(raw).filter((k) => !KNOWN_KEYS.has(k) && raw[k] != null && raw[k] !== "");
+  return [...groups, recordFieldGroup(raw, otherKeys, "Other")];
 }
 
 function buildMarkdown(entry: LogEntry, raw: Raw, dqlFilter: string): string {
-  const sections: string[] = [formatLogContent(entry.content) ?? "_No content available_"];
+  const dark = environment.appearance === "dark";
+  const sections: string[] = [
+    headerMarkdown(
+      {
+        severity: logSeverity(entry.status, entry.level),
+        title: entry.service ?? val(raw["dt.app.name"]) ?? "Unknown service",
+        subtitle: entry.source ?? "",
+      },
+      dark,
+    ),
+    formatLogContent(entry.content) ?? "_No content available_",
+  ];
 
-  const topologyTable = rowTable(TOPOLOGY_ROWS, raw, entry);
-  if (topologyTable) sections.push("### Topology", topologyTable);
-
-  const fieldsTable = rowTable(FIELD_ROWS, raw, entry);
-  if (fieldsTable) sections.push("### Fields", fieldsTable);
+  const fields = keyValueGroupsMarkdown(fieldGroups(raw, entry), dark);
+  if (fields) sections.push(fields);
 
   // DQL filter
-  sections.push("### DQL Filter *(⌘D to copy)*", fenceCode(dqlFilter));
+  sections.push("### DQL Filter *(⌘⇧Q to copy)*", fenceCode(dqlFilter));
 
   // Raw JSON at the bottom
   sections.push("### Raw Fields", fenceCode(JSON.stringify(raw, null, 2), "json"));
@@ -184,12 +201,18 @@ export default function LogDetail({
   const { push } = useNavigation();
   const raw = entry.raw as Raw;
 
-  const status = val(entry.status);
   const serviceName = val(raw["service.name"]);
   const appName = val(raw["dt.app.name"]);
-  const hostName = pick("host.name", "dt.entity.host")(raw, entry);
   const processName = pick("dt.process.name", "dt.process_group.detected_name")(raw, entry);
-  const envVal = pick("dt.environment.id", "environment")(raw, entry);
+
+  const hostName = pick("host.name", "dt.entity.host")(raw, entry);
+  const envVal = pick("deployment.environment", "environment")(raw, entry);
+  const status = val(entry.status);
+  const severity = logSeverity(entry.status, entry.level);
+  const cloud = [val(raw["cloud.provider"]), pick("aws.region", "cloud.region")(raw, entry)]
+    .filter(Boolean)
+    .join(" · ");
+  const k8s = [val(raw["k8s.namespace.name"]), val(raw["k8s.cluster.name"])].filter(Boolean).join(" · ");
 
   const traceId = entry.traceId;
   const traceUrl = traceLink(tenant, traceId);
@@ -214,7 +237,7 @@ export default function LogDetail({
             <Action.OpenInBrowser
               title="Open in Distributed Traces"
               url={traceUrl}
-              shortcut={{ modifiers: ["cmd", "shift"], key: "o" }}
+              shortcut={Keyboard.Shortcut.Common.OpenWith}
             />
           )}
           <Action
@@ -236,40 +259,62 @@ export default function LogDetail({
       }
       metadata={
         <Detail.Metadata>
-          {/* ── Core: Status / Level / Time ───────────────────────────────── */}
           {status && (
             <Detail.Metadata.TagList title="Status">
-              <Detail.Metadata.TagList.Item text={status} color={levelColor(entry.level, status)} />
+              <Detail.Metadata.TagList.Item text={status} color={severityColor(severity)} />
             </Detail.Metadata.TagList>
           )}
-          <Detail.Metadata.Label title="Level" text={entry.level} />
-          <Detail.Metadata.Label title="Timestamp" text={new Date(entry.timestamp).toLocaleString()} />
-
-          {/* ── Service / Process ─────────────────────────────────────────── */}
-          <Detail.Metadata.Separator />
-          {serviceName && (
-            <Detail.Metadata.TagList title="Service">
-              <Detail.Metadata.TagList.Item text={serviceName} color={Color.Blue} />
-            </Detail.Metadata.TagList>
+          <Detail.Metadata.Label title="Level" text={entry.level} icon={severityIcon(severity)} />
+          <Detail.Metadata.Label
+            title="Timestamp"
+            text={new Date(entry.timestamp).toLocaleString()}
+            icon={{ source: Icon.Clock, tintColor: Color.SecondaryText }}
+          />
+          {(processName || appName || envVal || hostName) && <Detail.Metadata.Separator />}
+          {processName && (
+            <Detail.Metadata.Label
+              title="Process"
+              text={processName}
+              icon={{ source: Icon.Gear, tintColor: Color.Purple }}
+            />
           )}
-          {processName && <Detail.Metadata.Label title="Process" text={processName} />}
-          {appName && !serviceName && <Detail.Metadata.Label title="App" text={appName} />}
+          {appName && (
+            <Detail.Metadata.Label
+              title="App"
+              text={appName}
+              icon={{ source: Icon.AppWindow, tintColor: Color.Purple }}
+            />
+          )}
           {envVal && (
             <Detail.Metadata.TagList title="Environment">
               <Detail.Metadata.TagList.Item text={envVal} color={environmentColor(envVal)} />
             </Detail.Metadata.TagList>
           )}
-
-          {/* ── Host ─────────────────────────────────────────────────────── */}
           {hostName && (
-            <>
-              <Detail.Metadata.Separator />
-              <Detail.Metadata.Label title="Host" text={hostName} />
-            </>
+            <Detail.Metadata.Label
+              title="Host"
+              text={hostName}
+              icon={{ source: Icon.ComputerChip, tintColor: Color.Purple }}
+            />
           )}
-
-          {/* ── Telemetry link ────────────────────────────────────────────── */}
-          {traceMetadataLink(traceUrl)}
+          {(cloud || k8s) && <Detail.Metadata.Separator />}
+          {cloud && (
+            <Detail.Metadata.Label title="Cloud" text={cloud} icon={{ source: Icon.Cloud, tintColor: Color.Blue }} />
+          )}
+          {k8s && (
+            <Detail.Metadata.Label title="Kubernetes" text={k8s} icon={{ source: Icon.Box, tintColor: Color.Blue }} />
+          )}
+          {traceId && <Detail.Metadata.Separator />}
+          {traceId &&
+            (traceUrl ? (
+              <Detail.Metadata.Link title="Trace" target={traceUrl} text={traceId} />
+            ) : (
+              <Detail.Metadata.Label
+                title="Trace"
+                text={traceId}
+                icon={{ source: Icon.Link, tintColor: Color.Green }}
+              />
+            ))}
         </Detail.Metadata>
       }
     />
