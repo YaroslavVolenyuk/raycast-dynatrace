@@ -34,13 +34,23 @@ export const MAX_COUNTED = 99;
  */
 const RETRY_AFTER_ERROR_MS = 15 * 60_000;
 
+/**
+ * What the menu shows of a problem, and all that is written to the Cache (plain
+ * files on disk): never the raw Grail record with its entity IDs and attributes.
+ */
+export type MenuProblem = Pick<ProblemEntry, "id" | "name" | "displayId" | "category">;
+
+function toMenuProblem({ id, name, displayId, category }: ProblemEntry): MenuProblem {
+  return { id, name, displayId, category };
+}
+
 export type ProblemsResult =
   | { state: "no-tenant" }
   | {
       state: "ok";
       endpoint: string;
       /** The first MAX_SHOWN problems, newest first. */
-      problems: ProblemEntry[];
+      problems: MenuProblem[];
       /** Open problems found, up to MAX_COUNTED. */
       total: number;
       /** More than MAX_COUNTED problems are open. */
@@ -57,19 +67,19 @@ export type ProblemsResult =
  * (in useCachedPromise's own cache, which survives an update) have no `total`,
  * and their `hasMore` meant "more than MAX_SHOWN": read them that way, never as zero.
  */
-function countOf(result: { problems: ProblemEntry[]; total?: number; hasMore: boolean }) {
+function countOf(result: { problems: MenuProblem[]; total?: number; hasMore: boolean }) {
   return result.total === undefined
     ? { count: result.problems.length, cap: MAX_SHOWN }
     : { count: result.total, cap: MAX_COUNTED };
 }
 
 /** Open problems found (up to the cap); a stored result from an older version counts what it lists. */
-export function openProblemCount(result: { problems: ProblemEntry[]; total?: number; hasMore: boolean }): number {
+export function openProblemCount(result: { problems: MenuProblem[]; total?: number; hasMore: boolean }): number {
   return countOf(result).count;
 }
 
 /** "3", or "99+" when more problems are open than were counted. */
-export function problemCountLabel(result: { problems: ProblemEntry[]; total?: number; hasMore: boolean }): string {
+export function problemCountLabel(result: { problems: MenuProblem[]; total?: number; hasMore: boolean }): string {
   const { count, cap } = countOf(result);
   return result.hasMore ? `${cap}+` : String(count);
 }
@@ -85,7 +95,7 @@ const LAST_RESULT_KEY = "menubar-problems:last-result";
 const LAST_FETCH_KEY = "menubar-problems:last-fetch";
 const PREFS_KEY = "menubar-problems:prefs";
 /** Bump when the parsing or shape of cached results changes: results cached by older code are then refetched. */
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 const DEFAULT_INTERVAL_MINUTES = 30;
 
 /** The fetch currently running in this process, shared by every loadProblems() call. */
@@ -119,7 +129,7 @@ async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<Pr
       endpoint,
       tenantName: tenant.name,
       extraFilter: prefs.extraFilter?.trim() || undefined,
-      problems: all.slice(0, MAX_SHOWN),
+      problems: all.slice(0, MAX_SHOWN).map(toMenuProblem),
       total: Math.min(all.length, MAX_COUNTED),
       hasMore: all.length > MAX_COUNTED,
       fetchedAt: Date.now(),

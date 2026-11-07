@@ -48,6 +48,28 @@ it("counts every open problem up to the cap but keeps only the shown ones", asyn
   expect(result.state === "ok" && problemCountLabel(result)).toBe("12");
 });
 
+// The Cache is plain files: the raw Grail record (entity IDs, any attribute) must not land there.
+it("writes only the fields the menu shows to the cache", async () => {
+  const full = {
+    id: "p1",
+    name: "Out-of-memory kills",
+    displayId: "P-1",
+    category: "RESOURCE_CONTENTION",
+    isOpen: true,
+    startTime: "2026-11-06T10:00:00Z",
+    affectedEntityNames: ["payment-db-01"],
+    raw: { "event.id": "p1", affected_entity_ids: ["HOST-SECRET123"], "custom.attribute": "internal" },
+  } as unknown as ProblemEntry;
+  mockList.mockResolvedValueOnce([full]);
+  const result = await loadProblems(true);
+  expect(result.state === "ok" && result.problems).toEqual([
+    { id: "p1", name: "Out-of-memory kills", displayId: "P-1", category: "RESOURCE_CONTENTION" },
+  ]);
+  const stored = new raycast.Cache().get("menubar-problems:last-result") ?? "";
+  expect(stored).toContain("Out-of-memory kills");
+  expect(stored).not.toMatch(/HOST-SECRET123|custom\.attribute|payment-db-01|"raw"/);
+});
+
 it("shows N+ only past the counting cap", async () => {
   mockList.mockResolvedValueOnce(problems(MAX_COUNTED + 1));
   const result = await loadProblems(true);
