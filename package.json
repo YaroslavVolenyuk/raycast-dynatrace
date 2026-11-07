@@ -284,24 +284,24 @@
     "node": ">=22.22.2"
   },
   "dependencies": {
-    "@raycast/api": "^2.9.0",
-    "@raycast/utils": "^2.2.7",
+    "@raycast/api": "^2.11.1",
+    "@raycast/utils": "^2.3.3",
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@raycast/eslint-config": "2.0.4",
+    "@raycast/eslint-config": "^2.2.0",
     "@types/jest": "30.0.0",
-    "@types/node": "22.13.10",
-    "@types/react": "^19.2.17",
-    "eslint": "9.22.0",
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "eslint": "^9.39.5",
     "eslint-plugin-security": "4.2.1",
     "eslint-plugin-sonarjs": "4.2.2",
     "husky": "9.1.7",
-    "jest": "30.4.1",
-    "knip": "5.61.3",
+    "jest": "^30.5.2",
+    "knip": "^6.44.1",
     "lint-staged": "17.6.0",
-    "prettier": "3.5.3",
-    "ts-jest": "29.4.11",
+    "prettier": "^3.9.10",
+    "ts-jest": "^29.4.15",
     "ts-node": "10.9.2",
     "typescript": "5.8.2"
   },
@@ -314,5 +314,9 @@
     "test": "jest --passWithNoTests",
     "knip": "knip",
     "prepare": "husky"
+  },
+  "overrides": {
+    "minimatch": "^11.0.5",
+    "glob": "^14.0.4"
   }
 }
