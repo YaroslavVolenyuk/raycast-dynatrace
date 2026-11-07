@@ -36,6 +36,7 @@ function mockErrorResponse(status: number, body: string) {
 
 beforeEach(() => {
   jest.resetAllMocks(); // also drops queued mockResolvedValueOnce values, so a failing test cannot leak into the next
+  jest.restoreAllMocks(); // the real Date.now after the expiry test
   // Reset module registry so the in-memory tokenCache is re-created per test.
   jest.resetModules();
 });
@@ -58,6 +59,21 @@ test("getAccessToken throws OAuthError on non-OK response", async () => {
   mockErrorResponse(401, '{"error":"unauthorized"}');
   const { getAccessToken, OAuthError } = await loadAuth();
   await expect(getAccessToken(TENANT)).rejects.toThrow(OAuthError);
+});
+
+// Tokens live about 5 minutes; one is renewed 30 s before it expires so a query never starts with a dying token.
+test("getAccessToken reuses a token until 30 s before it expires, then fetches a new one", async () => {
+  let now = 1_000_000;
+  jest.spyOn(Date, "now").mockImplementation(() => now);
+  mockTokenResponse("token-1", 300);
+  mockTokenResponse("token-2", 300);
+  const { getAccessToken } = await loadAuth();
+  expect(await getAccessToken(TENANT)).toBe("token-1");
+  now += 269_000;
+  expect(await getAccessToken(TENANT)).toBe("token-1");
+  now += 2_000; // 29 s left
+  expect(await getAccessToken(TENANT)).toBe("token-2");
+  expect(mockFetch).toHaveBeenCalledTimes(2);
 });
 
 test("invalidateTokenCache forces a refetch on next call", async () => {

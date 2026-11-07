@@ -1,51 +1,108 @@
+import { listProblems, liveTransport, type TenantConfig } from "../../../sdk";
 import { classifyProblemsError } from "../problemsError";
 
-describe("classifyProblemsError", () => {
-  it("names the missing scope from a 403 message", () => {
-    const r = classifyProblemsError(
-      new Error(
-        "Access denied — OAuth client is missing required scopes (storage:buckets:read, storage:events:read). Check Manage Tenants.",
-      ),
+// The rules match the wording of the errors the SDK throws, so the errors here
+// come from the real producers (listProblems → executeDqlQuery → fetch), not from
+// copied strings: rewording an SDK message must fail this file.
+const mockFetch = jest.fn();
+global.fetch = mockFetch as unknown as typeof fetch;
+
+const TOKEN_TENANT = {
+  id: "t1",
+  name: "Prod",
+  tenantEndpoint: "https://abc12345.apps.dynatrace.com",
+  clientId: "",
+  clientSecret: "",
+  ssoEndpoint: "",
+  scopes: [],
+  platformToken: "dt0s16.A.B",
+} as TenantConfig;
+const OAUTH_TENANT = {
+  ...TOKEN_TENANT,
+  clientId: "dt0s02.A",
+  clientSecret: "dt0s02.A.B",
+  ssoEndpoint: "https://sso.dynatrace.com/sso/oauth2/token",
+  platformToken: undefined,
+} as TenantConfig;
+
+const respond = (status: number, body: unknown) => ({
+  ok: status < 400,
+  status,
+  text: async () => (typeof body === "string" ? body : JSON.stringify(body)),
+});
+
+/** Classifies what listProblems throws for the given responses. */
+async function classifyFailure(tenant: TenantConfig, ...responses: unknown[]) {
+  for (const r of responses) {
+    if (r instanceof Error) mockFetch.mockRejectedValueOnce(r);
+    else mockFetch.mockResolvedValueOnce(r);
+  }
+  const err = await listProblems(liveTransport, tenant).then(
+    () => undefined,
+    (e: unknown) => e,
+  );
+  expect(err).toBeInstanceOf(Error);
+  return classifyProblemsError(err);
+}
+
+beforeEach(() => mockFetch.mockReset());
+afterEach(() => jest.restoreAllMocks());
+
+describe("classifyProblemsError, fed by the SDK's own errors", () => {
+  it("names the missing scope from a 403", async () => {
+    const r = await classifyFailure(TOKEN_TENANT, respond(403, "forbidden"));
+    expect(r).toMatchObject({ kind: "config", summary: "Missing scope: storage:buckets:read, storage:events:read" });
+  });
+
+  it("treats a rejected token or OAuth client as config", async () => {
+    expect((await classifyFailure(TOKEN_TENANT, respond(401, ""))).kind).toBe("config");
+    const oauth = await classifyFailure(OAUTH_TENANT, respond(401, '{"error":"invalid_client"}'));
+    expect(oauth).toMatchObject({ kind: "config", summary: "Authentication failed — check credentials" });
+  });
+
+  it("points a query Grail rejects at the Extra DQL Filter", async () => {
+    const r = await classifyFailure(TOKEN_TENANT, respond(400, { error: { code: 400, message: "Syntax error" } }));
+    expect(r).toMatchObject({ kind: "config", summary: "Query rejected — check Extra DQL Filter in preferences" });
+  });
+
+  it("flags an invalid Extra DQL Filter without querying", async () => {
+    const err = await listProblems(liveTransport, TOKEN_TENANT, { extraFilter: "a | limit 1" }).catch((e) => e);
+    expect(classifyProblemsError(err).kind).toBe("config");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("treats a non-existent environment host as config, not as a network outage", async () => {
+    const dns = Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } });
+    expect(await classifyFailure(TOKEN_TENANT, dns)).toMatchObject({
+      kind: "config",
+      summary: "Environment URL not found — check the tenant",
+    });
+  });
+
+  it("says the endpoint looks wrong when it answers with an HTML page", async () => {
+    expect((await classifyFailure(TOKEN_TENANT, respond(200, "<html>login</html>"))).summary).toBe(
+      "Tenant endpoint looks wrong",
     );
-    expect(r.kind).toBe("config");
-    expect(r.summary).toContain("storage:events:read");
   });
 
-  it("treats auth failures as config", () => {
-    expect(classifyProblemsError(new Error("Authentication failed — token rejected by Dynatrace.")).kind).toBe(
-      "config",
-    );
-    expect(classifyProblemsError(new Error("OAuth error: check client_id / client_secret (401)")).kind).toBe("config");
+  it("treats a query that did not finish as transient", async () => {
+    let now = 0;
+    jest.spyOn(Date, "now").mockImplementation(() => (now += 3_600_000)); // every look at the clock: an hour later
+    const running = respond(202, { state: "RUNNING", requestToken: "tok" });
+    expect(await classifyFailure(TOKEN_TENANT, running, respond(200, ""))).toMatchObject({
+      kind: "transient",
+      summary: "Dynatrace is not responding",
+    });
   });
 
-  it("treats timeouts and unknown errors as transient", () => {
-    expect(classifyProblemsError(new Error("Dynatrace is not responding (15s timeout)")).kind).toBe("transient");
-    expect(classifyProblemsError("boom").kind).toBe("transient");
+  it("does not blame the network for records it could not parse", async () => {
+    const bad = { "event.id": "p1", "event.name": 42, "event.status": "ACTIVE", "event.start": "t" };
+    const r = await classifyFailure(TOKEN_TENANT, respond(200, { state: "SUCCEEDED", result: { records: [bad] } }));
+    expect(r).toMatchObject({ kind: "transient", summary: "Unexpected data from Dynatrace — copy error details" });
   });
-});
 
-describe("classifyProblemsError — query errors", () => {
-  it("points a rejected query at the Extra DQL Filter", () => {
-    const r = classifyProblemsError(new Error("Dynatrace: Syntax error near 'foo' (code 400)"));
-    expect(r.kind).toBe("config");
-    expect(r.summary).toContain("Extra DQL Filter");
-  });
-  it("flags an invalid filter expression", () => {
-    expect(classifyProblemsError(new Error("Extra DQL filter must be a single expression")).kind).toBe("config");
-  });
-});
-
-describe("classifyProblemsError — environment URL", () => {
-  it("treats a non-existent environment host as config, not as a network outage", () => {
-    const r = classifyProblemsError(new Error("Environment URL not found: x.apps.dynatrace.ua does not exist."));
-    expect(r.kind).toBe("config");
-  });
-});
-
-describe("classifyProblemsError — unreadable records", () => {
-  it("does not blame the network for records it could not parse", () => {
-    const r = classifyProblemsError(new Error("Unexpected problem record format (event.name: expected string)"));
-    expect(r.summary).toContain("Unexpected data");
+  it("treats anything else as transient", () => {
+    expect(classifyProblemsError("boom")).toMatchObject({ kind: "transient", summary: "Could not reach Dynatrace" });
   });
 });
 

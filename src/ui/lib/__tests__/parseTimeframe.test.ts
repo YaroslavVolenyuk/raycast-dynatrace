@@ -25,6 +25,22 @@ describe("parseTimeframe", () => {
     expect(Math.round(hours)).toBe(24);
   });
 
+  it("covers the local calendar day for today and yesterday", () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 25, 15, 30) });
+    try {
+      expect(parseTimeframe("today")).toEqual({
+        start: new Date(2026, 9, 25, 0, 0, 0, 0).toISOString(),
+        end: new Date(2026, 9, 25, 23, 59, 59, 999).toISOString(),
+      });
+      expect(parseTimeframe("Yesterday")).toEqual({
+        start: new Date(2026, 9, 24, 0, 0, 0, 0).toISOString(),
+        end: new Date(2026, 9, 24, 23, 59, 59, 999).toISOString(),
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("handles empty/nullish input as 24h", () => {
     const hours = (input: string | null) => {
       const { start, end } = parseTimeframe(input);
