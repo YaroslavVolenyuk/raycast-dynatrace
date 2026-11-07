@@ -2,21 +2,13 @@ import { Detail, ActionPanel, Action, Color, Icon, environment, Keyboard } from 
 import type { SpanEntry } from "../../../sdk/resources";
 import { formatDuration } from "../../../sdk/resources";
 import type { TenantConfig } from "../../../sdk/auth";
-import { buildTraceUrl } from "../../lib/deepLinks";
 import { fenceCode } from "../../lib/markdown";
 import { severityColor } from "../../lib/severityColor";
-import { headerMarkdown, keyValueGroupsMarkdown, severityOf, type KeyValueGroup } from "../../lib/svg";
-import { copyTraceSpanActions, tenantBaseUrl } from "../../components/TraceBlocks";
+import { headerMarkdown, keyValueGroupsMarkdown, severityOf } from "../../lib/svg";
+import { copyTraceSpanActions } from "../../components/TraceBlocks";
+import { fieldGroups, hasDb, hasHttp, traceLink, type Raw } from "./TraceDetail.helpers";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-type Raw = Record<string, unknown>;
-type Row = readonly [string, string | undefined];
-
-function val(v: unknown): string | undefined {
-  if (v == null || v === "" || v === "N/A") return undefined;
-  return String(v);
-}
 
 function kindIcon(kind: string): Icon {
   switch (kind.toLowerCase()) {
@@ -33,53 +25,7 @@ function kindIcon(kind: string): Icon {
   }
 }
 
-const hasHttp = (entry: SpanEntry) => !!(entry.httpMethod || entry.urlPath);
-const hasDb = (entry: SpanEntry) => !!(entry.dbSystem || entry.dbOperation);
-const hasRpc = (raw: Raw) => !!(val(raw["rpc.system"]) || val(raw["rpc.method"]));
-
 // ── Markdown ──────────────────────────────────────────────────────────────────
-
-// The status, kind, duration, start time, request, status code and database
-// are in the metadata pane, so the field card holds only what is not there.
-function fieldGroups(entry: SpanEntry, raw: Raw): KeyValueGroup[] {
-  const rawVal = (key: string) => val(raw[key]);
-  const server: Row[] = [
-    ["server.address", rawVal("server.address")],
-    ["server.port", rawVal("server.port")],
-  ];
-  const groups: Array<{ title: string; show: boolean; rows: Row[] }> = [
-    {
-      title: "Span",
-      show: true,
-      rows: [
-        ["trace.id", entry.traceId],
-        ["span.id", entry.spanId],
-        ["span.parent_id", entry.parentSpanId],
-        ["endpoint.name", rawVal("endpoint.name")],
-        ["status.message", entry.statusMessage],
-      ],
-    },
-    { title: "HTTP", show: hasHttp(entry), rows: [["http.route", entry.httpRoute], ...server] },
-    {
-      title: "Database",
-      show: hasDb(entry),
-      rows: [["db.namespace", entry.dbNamespace], ["db.collection.name", rawVal("db.collection.name")], ...server],
-    },
-    {
-      title: "RPC",
-      show: hasRpc(raw),
-      rows: [
-        ["rpc.system", rawVal("rpc.system")],
-        ["rpc.service", rawVal("rpc.service")],
-        ["rpc.method", rawVal("rpc.method")],
-      ],
-    },
-  ];
-  return groups.map(({ title, show, rows }) => ({
-    title,
-    rows: show ? rows.flatMap(([k, v]) => (v ? [[k, v] as const] : [])) : [],
-  }));
-}
 
 function buildMarkdown(entry: SpanEntry, raw: Raw): string {
   const dark = environment.appearance === "dark";
@@ -142,8 +88,7 @@ function dbMetadata(entry: SpanEntry) {
 
 export default function TraceDetail({ entry, tenant }: { entry: SpanEntry; tenant?: TenantConfig }) {
   const raw = entry.raw as Raw;
-  const baseUrl = tenantBaseUrl(tenant);
-  const traceUrl = baseUrl ? buildTraceUrl(baseUrl, entry.traceId) : undefined;
+  const traceUrl = traceLink(tenant, entry.traceId);
   const durationStr = entry.durationUs != null ? formatDuration(entry.durationUs) : "—";
   const severity = severityOf(entry.statusCode);
 
