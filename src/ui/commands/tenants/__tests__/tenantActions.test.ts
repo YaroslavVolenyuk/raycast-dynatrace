@@ -1,5 +1,10 @@
 import type { TenantConfig } from "../../../../sdk/auth";
-import { confirmAndDeleteTenant, saveTenantAndActivateFirst, verifyTenantConnection } from "../tenantActions";
+import {
+  checkAndSaveTenant,
+  confirmAndDeleteTenant,
+  saveTenantAndActivateFirst,
+  verifyTenantConnection,
+} from "../tenantActions";
 
 const mockConfirmAlert = jest.fn();
 const mockShowToast = jest.fn();
@@ -11,7 +16,7 @@ const mockSetActive = jest.fn();
 
 jest.mock("@raycast/api", () => ({
   Alert: { ActionStyle: { Destructive: "destructive" } },
-  Icon: { Trash: "trash" },
+  Icon: { Trash: "trash", ExclamationMark: "exclamation" },
   Toast: { Style: { Animated: "animated", Success: "success", Failure: "failure" } },
   confirmAlert: (o: unknown) => mockConfirmAlert(o),
   showToast: (o: unknown) => mockShowToast(o),
@@ -96,5 +101,38 @@ describe("saveTenantAndActivateFirst", () => {
     mockList.mockResolvedValue([tenant, { ...tenant, id: "t2" }]);
     await saveTenantAndActivateFirst(tenant);
     expect(mockSetActive).not.toHaveBeenCalled();
+  });
+});
+
+// THREAT_MODEL.md C6: the connection test already sends the credentials, so the
+// question about a foreign host must come before it, and a "no" must send nothing.
+describe("checkAndSaveTenant", () => {
+  const foreign = { ...tenant, tenantEndpoint: "https://dt.example.com" };
+
+  it("asks before testing a foreign host, and sends nothing after a no", async () => {
+    mockConfirmAlert.mockResolvedValue(false);
+    expect(await checkAndSaveTenant(foreign, undefined, { test: true })).toBe(false);
+    expect(mockConfirmAlert).toHaveBeenCalledWith(expect.objectContaining({ title: "Not a Dynatrace Host" }));
+    expect(mockTest).not.toHaveBeenCalled();
+    expect(mockSave).not.toHaveBeenCalled();
+  });
+
+  it("confirms, then tests, then saves", async () => {
+    const order: string[] = [];
+    mockConfirmAlert.mockImplementation(async () => (order.push("confirm"), true));
+    mockShowToast.mockResolvedValue({});
+    mockTest.mockImplementation(async () => (order.push("test"), { valid: true }));
+    mockSave.mockImplementation(async () => void order.push("save"));
+    mockList.mockResolvedValue([foreign]);
+    expect(await checkAndSaveTenant(foreign, undefined, { test: true })).toBe(true);
+    expect(order).toEqual(["confirm", "test", "save"]);
+  });
+
+  it("does not ask about a Dynatrace host", async () => {
+    mockShowToast.mockResolvedValue({});
+    mockList.mockResolvedValue([tenant]);
+    expect(await checkAndSaveTenant(tenant, undefined, { test: false })).toBe(true);
+    expect(mockConfirmAlert).not.toHaveBeenCalled();
+    expect(mockSave).toHaveBeenCalledWith(tenant);
   });
 });

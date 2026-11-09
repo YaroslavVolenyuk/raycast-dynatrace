@@ -3,6 +3,7 @@ import { normalizeSpan, type SpanRecord } from "../../../../sdk/resources";
 import type { TenantConfig } from "../../../../sdk/auth";
 import { serialize, type Node } from "../../../__tests__/raycastTree";
 import { fenceCode } from "../../../lib/markdown";
+import { HOSTILE, unfencedLines } from "../../../__tests__/markdownSafety";
 import { traceLink } from "../TraceDetail.helpers";
 import TraceDetail from "../TraceDetail";
 
@@ -44,6 +45,12 @@ function render(record: Record<string, unknown>, tenant?: TenantConfig) {
 const tenant = { tenantEndpoint: "https://abc123.apps.dynatrace.com/" } as TenantConfig;
 
 describe("TraceDetail", () => {
+  it("keeps hostile telemetry inside fences and SVG cards", () => {
+    const fields = ["span.name", "service.name", "http.request.method", "url.path", "db.system", "db.statement"];
+    const view = render({ ...Object.fromEntries(fields.map((f) => [f, HOSTILE])), [HOSTILE]: HOSTILE });
+    expect(unfencedLines(view.markdown)).toEqual(["### Raw Fields"]);
+  });
+
   it("shows the request, database and timing in the metadata pane and links the trace", () => {
     const record = {
       "span.kind": "SERVER",

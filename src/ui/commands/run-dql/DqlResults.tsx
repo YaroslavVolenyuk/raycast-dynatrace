@@ -44,7 +44,7 @@ function recordSeverity(record: Record<string, unknown>): Severity {
 }
 
 /** Built when the record is opened, not per list row: the SVG cards are only needed for the one record on screen. */
-function RecordDetail(props: {
+export function RecordDetail(props: {
   record: Record<string, unknown>;
   columns: readonly string[];
   position: number;

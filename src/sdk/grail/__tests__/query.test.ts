@@ -62,6 +62,16 @@ describe("happy path", () => {
     expect(result).toEqual(records);
   });
 
+  // THREAT_MODEL.md Q5: every query is billable; Grail's own limits must stay on.
+  it("asks Grail to enforce its consumption and scan limits", async () => {
+    mockFetch.mockResolvedValueOnce(grailOk([]));
+    await executeDqlQuery(TENANT, "fetch logs");
+    const payload = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(payload.enforceQueryConsumptionLimit).toBe(true);
+    expect(payload.defaultScanLimitGbytes).toBeGreaterThan(0);
+    expect(payload.defaultScanLimitGbytes).toBeLessThanOrEqual(100);
+  });
+
   it("returns [] when result is absent (no result field in response)", async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

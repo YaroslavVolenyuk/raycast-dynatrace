@@ -61,6 +61,11 @@ describe("toCsv", () => {
     expect(toCsv([{ a: "x;=1+cmd|' /C calc'!A0;y" }], ["a"]).split("\n")[1]).toBe(`"x;=1+cmd|' /C calc'!A0;y"`);
   });
 
+  // Column names are record keys, i.e. telemetry too.
+  it("neutralizes a formula in a column name", () => {
+    expect(toCsv([{ "=cmd": 1 }], ["=cmd"]).split("\n")[0]).toBe("'=cmd");
+  });
+
   it("keeps numbers and ordinary text as they are", () => {
     expect(toCsv([{ n: -1, s: "a=b", t: "1-2" }], ["n", "s", "t"]).split("\n")[1]).toBe("-1,a=b,1-2");
   });

@@ -4,6 +4,7 @@ import { serialize, type Node } from "../../../__tests__/raycastTree";
 import { buildLogContextQuery, traceLink } from "../LogDetail.helpers";
 import LogDetail from "../LogDetail";
 import { fenceCode } from "../../../lib/markdown";
+import { HOSTILE, unfencedLines } from "../../../__tests__/markdownSafety";
 
 // LogDetail is called as a function (no React renderer): the Raycast components
 // are named stubs, so the returned tree can be searched. What goes into each
@@ -79,6 +80,19 @@ describe("LogDetail", () => {
     expect(view.markdown).toContain(fenceCode("hello"));
     expect(view.markdown).toContain(fenceCode(query));
     expect(view.markdown).toContain(fenceCode(JSON.stringify(raw, null, 2), "json"));
+  });
+
+  it("keeps hostile telemetry inside fences and SVG cards", () => {
+    const hostileRaw = { "service.name": HOSTILE, "log.source": HOSTILE, "k8s.pod.name": HOSTILE, [HOSTILE]: HOSTILE };
+    const view = render({
+      ...entry,
+      content: HOSTILE,
+      service: HOSTILE,
+      source: HOSTILE,
+      host: HOSTILE,
+      raw: hostileRaw as unknown as LogRecord,
+    });
+    expect(unfencedLines(view.markdown)).toEqual(["### DQL Filter *(⌘⇧Q to copy)*", "### Raw Fields"]);
   });
 
   it("keeps the in-Raycast trace action but no Dynatrace link without a tenant", () => {

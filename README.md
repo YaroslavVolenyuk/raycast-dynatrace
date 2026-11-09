@@ -65,7 +65,8 @@ takes precedence. Like Dynatrace, results are capped at 1,000 records (and
 1 MB); add `| limit` to the query for fewer. When Grail reports that a result
 was truncated or a scan limit was hit, the result list says so. Every run is a
 billable query: a query still running after 3 minutes, or one you leave by
-closing the view, is canceled in Dynatrace so it stops scanning. Results are listed with a
+closing the view once it has run for a few seconds, is canceled in Dynatrace so
+it stops scanning. Results are listed with a
 title column picked from the data, a filter over all fields, a details panel
 (⌘D), and copy actions for one record (JSON) or all records (JSON or CSV).
 The last query and timeframe are restored the next time the command opens.
@@ -155,8 +156,10 @@ Tenants, including platform tokens and OAuth client secrets, are stored in
 Raycast's LocalStorage, which is Raycast's encrypted local database. It stays
 on this machine and is not synced anywhere. Access tokens obtained from Dynatrace SSO are held in
 memory only for the lifetime of the Raycast process and are never
-persisted. Log and span results are not cached on disk either; only the
-menu bar keeps its last problem list in Raycast's cache.
+persisted. Log and span results are not cached on disk either. Only the
+menu bar keeps its last result in Raycast's cache (plain files): the shown
+problems' IDs, titles and categories, the environment URL and tenant name, and
+the last error message, with tokens removed.
 
 ## Architecture
 

@@ -6,7 +6,7 @@ import { Alert, Icon, Toast, confirmAlert, showToast } from "@raycast/api";
 import { credentialsKind, type TenantConfig } from "../../../sdk/auth";
 import { testTenantConnection } from "../../../sdk";
 import { deleteTenant, listTenants, saveTenant, setActiveTenant } from "../../../services";
-import { describeScopeCheck } from "./tenantForm.helpers";
+import { describeScopeCheck, newForeignHosts } from "./tenantForm.helpers";
 
 /** Asks for confirmation, then deletes the tenant. Resolves to false when the user cancels. */
 export async function confirmAndDeleteTenant(tenant: TenantConfig): Promise<boolean> {
@@ -70,4 +70,23 @@ export async function saveTenantAndActivateFirst(config: TenantConfig): Promise<
   await saveTenant(config);
   const all = await listTenants();
   if (all.length === 1) await setActiveTenant(config.id);
+}
+
+/**
+ * Confirm, test, save — in this order. The question about a foreign host comes
+ * first because the test already hands the credentials to that host
+ * (THREAT_MODEL.md C6). `onConfirmed` runs once nothing more is asked, to show
+ * progress. Resolves to true when the tenant was saved.
+ */
+export async function checkAndSaveTenant(
+  config: TenantConfig,
+  previous: TenantConfig | undefined,
+  { test, onConfirmed }: { test: boolean; onConfirmed?: () => void },
+): Promise<boolean> {
+  const foreignHosts = newForeignHosts(config, previous);
+  if (foreignHosts.length > 0 && !(await confirmForeignHosts(config, foreignHosts))) return false;
+  onConfirmed?.();
+  if (test && !(await verifyTenantConnection(config))) return false;
+  await saveTenantAndActivateFirst(config);
+  return true;
 }
