@@ -13,7 +13,7 @@
 
 import { z } from "zod";
 import type { TenantConfig } from "../auth";
-import { escapeDqlString } from "../grail";
+import { dqlDuration, dqlLimit, escapeDqlString } from "../grail";
 import type { DynatraceTransport } from "../transport";
 import { normalizeRecords, type ResourcePage } from "./page";
 
@@ -131,7 +131,7 @@ export interface ListLogsOptions {
 }
 
 function logsFetchClause(timeframeDql: string | undefined, timeframe: ListLogsOptions["timeframe"]): string {
-  if (timeframeDql) return `fetch logs, from: now()-${timeframeDql}`;
+  if (timeframeDql) return `fetch logs, from: now()-${dqlDuration(timeframeDql)}`;
   if (timeframe)
     return `fetch logs, from: "${escapeDqlString(timeframe.start)}", to: "${escapeDqlString(timeframe.end)}"`;
   return "fetch logs";
@@ -158,7 +158,7 @@ export function buildLogsQuery(opts: ListLogsOptions = {}): string {
     );
   }
   parts.push("sort timestamp desc");
-  parts.push(`limit ${limit}`);
+  parts.push(`limit ${dqlLimit(limit)}`);
 
   return parts.join(" | ");
 }

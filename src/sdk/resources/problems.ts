@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type { TenantConfig } from "../auth";
 import type { DynatraceTransport } from "../transport";
+import { dqlDuration, dqlLimit } from "../grail";
 import { normalizeRecords, type ResourcePage } from "./page";
 
 // ── 1. Raw API record schema ──────────────────────────────────────────────────
@@ -107,11 +108,14 @@ export function buildProblemsQuery(opts: ListProblemsOptions = {}): string {
   }
   // dedup BEFORE the status filter: otherwise a problem's early ACTIVE snapshot
   // would still count as open after it was closed.
-  const parts = [`fetch dt.davis.problems, from: now()-${lookback}`, "dedup event.id, sort: {timestamp desc}"];
+  const parts = [
+    `fetch dt.davis.problems, from: now()-${dqlDuration(lookback)}`,
+    "dedup event.id, sort: {timestamp desc}",
+  ];
   if (status === "open") parts.push('filter event.status != "CLOSED"');
   if (extra) parts.push(`filter ${extra}`);
   parts.push("sort event.start desc");
-  parts.push(`limit ${limit}`);
+  parts.push(`limit ${dqlLimit(limit)}`);
   return parts.join(" | ");
 }
 

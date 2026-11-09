@@ -2,12 +2,28 @@
 // Problems app. A failed fetch is NEVER shown as "no problems": the icon turns
 // yellow and the menu explains what is wrong and how to fix it.
 
-import { Clipboard, Color, Icon, LaunchType, MenuBarExtra, launchCommand, open, showHUD } from "@raycast/api";
+import {
+  Clipboard,
+  Color,
+  getPreferenceValues,
+  Icon,
+  LaunchType,
+  MenuBarExtra,
+  launchCommand,
+  open,
+  showHUD,
+} from "@raycast/api";
 import { useCachedPromise } from "@raycast/utils";
 import { buildProblemUrl } from "../../lib/deepLinks";
 import type { ProblemsErrorInfo } from "../../lib/problemsError";
 import { formatClock } from "../../lib/refreshThrottle";
-import { loadProblems, openProblemCount, problemCountLabel, type ProblemsResult } from "./problemsStore";
+import {
+  loadProblems,
+  openProblemCount,
+  problemCountLabel,
+  type Preferences,
+  type ProblemsResult,
+} from "./problemsStore";
 
 const CATEGORY_ICON: Record<string, { source: Icon; tintColor: Color }> = {
   AVAILABILITY: { source: Icon.CircleProgress, tintColor: Color.Red },
@@ -111,6 +127,8 @@ export default function MenubarProblems() {
   if (!data) return <MenuBarExtra isLoading icon={Icon.Globe} tooltip="Loading Dynatrace problems…" />;
 
   const { problems, endpoint } = data;
+  // From the preferences, not the stored result: the Cache is plain files.
+  const extraFilter = getPreferenceValues<Preferences>().extraFilter?.trim();
   const count = openProblemCount(data);
   const countLabel = problemCountLabel(data);
   const problemsAppUrl = `${endpoint}/ui/apps/dynatrace.davis.problems`;
@@ -151,9 +169,9 @@ export default function MenubarProblems() {
       ) : (
         <MenuBarExtra.Item title="No open problems" subtitle={data.tenantName} icon={Icon.Checkmark} />
       )}
-      {data.extraFilter && (
+      {extraFilter && (
         <MenuBarExtra.Section title="Extra DQL Filter (preferences)">
-          <MenuBarExtra.Item title={data.extraFilter} icon={Icon.Filter} />
+          <MenuBarExtra.Item title={extraFilter} icon={Icon.Filter} />
         </MenuBarExtra.Section>
       )}
       <MenuBarExtra.Section>

@@ -12,7 +12,7 @@
 
 import { z } from "zod";
 import type { TenantConfig } from "../auth";
-import { escapeDqlString } from "../grail";
+import { dqlDuration, dqlLimit, escapeDqlString } from "../grail";
 import type { DynatraceTransport } from "../transport";
 import { normalizeRecords, type ResourcePage } from "./page";
 
@@ -205,7 +205,7 @@ export interface ListSpansOptions {
 }
 
 function spansFetchClause(timeframeDql: string | undefined, timeframe: ListSpansOptions["timeframe"]): string {
-  if (timeframeDql) return `fetch spans, from: now()-${timeframeDql}`;
+  if (timeframeDql) return `fetch spans, from: now()-${dqlDuration(timeframeDql)}`;
   if (timeframe)
     return `fetch spans, from: "${escapeDqlString(timeframe.start)}", to: "${escapeDqlString(timeframe.end)}"`;
   return "fetch spans";
@@ -232,7 +232,7 @@ export function buildSpansQuery(opts: ListSpansOptions = {}): string {
   }
 
   parts.push("sort start_time desc");
-  parts.push(`limit ${limit}`);
+  parts.push(`limit ${dqlLimit(limit)}`);
 
   return parts.join(" | ");
 }

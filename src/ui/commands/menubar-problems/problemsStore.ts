@@ -7,6 +7,7 @@
 // extension. Preferences are extension-level for the same reason: both commands
 // must build the same query and cache signature.
 
+import { createHash } from "node:crypto";
 import { Cache, getPreferenceValues } from "@raycast/api";
 import {
   credentialsFingerprint,
@@ -35,8 +36,10 @@ export const MAX_COUNTED = 99;
 const RETRY_AFTER_ERROR_MS = 15 * 60_000;
 
 /**
- * What the menu shows of a problem, and all that is written to the Cache (plain
- * files on disk): never the raw Grail record with its entity IDs and attributes.
+ * What the menu shows of a problem, and all of it that is written to the Cache
+ * (plain files on disk): never the raw Grail record with its entity IDs and
+ * attributes. Besides these, a stored result holds only the environment URL
+ * (for the links), the tenant name and, after a failure, the error text.
  */
 export type MenuProblem = Pick<ProblemEntry, "id" | "name" | "displayId" | "category">;
 
@@ -60,7 +63,6 @@ export type ProblemsResult =
       fetchedAt: number;
       /** What the result was computed for — shown so "no problems" can be checked at a glance. */
       tenantName: string;
-      extraFilter?: string;
     }
   | { state: "error"; endpoint?: string; error: ProblemsErrorInfo };
 
@@ -86,7 +88,7 @@ export function problemCountLabel(result: { problems: MenuProblem[]; total?: num
   return result.hasMore ? `${cap}+` : String(count);
 }
 
-interface Preferences {
+export interface Preferences {
   refreshMinutes?: string;
   lookback?: string;
   extraFilter?: string;
@@ -97,7 +99,7 @@ const LAST_RESULT_KEY = "menubar-problems:last-result";
 const LAST_FETCH_KEY = "menubar-problems:last-fetch";
 const PREFS_KEY = "menubar-problems:prefs";
 /** Bump when the parsing or shape of cached results changes: results cached by older code are then refetched. */
-const CACHE_VERSION = 8;
+const CACHE_VERSION = 9;
 const DEFAULT_INTERVAL_MINUTES = 30;
 
 /** The fetch currently running in this process, shared by every loadProblems() call. */
@@ -131,7 +133,6 @@ async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<Pr
       state: "ok",
       endpoint,
       tenantName: tenant.name,
-      extraFilter: prefs.extraFilter?.trim() || undefined,
       problems: entries.slice(0, MAX_SHOWN).map(toMenuProblem),
       total: Math.min(found, MAX_COUNTED),
       hasMore: found > MAX_COUNTED,
@@ -157,15 +158,20 @@ export async function loadProblems(forced: boolean): Promise<ProblemsResult> {
   // Tenant, credentials, scopes, lookback and filter all change what the cached result means.
   // The Cache is plain files: credentials enter only as a hash, so a new secret or token
   // (e.g. after an auth error) refetches at once instead of after the retry delay.
-  const signature = JSON.stringify([
-    CACHE_VERSION,
-    tenant.id,
-    tenant.tenantEndpoint,
-    credentialsFingerprint(tenant),
-    [...tenant.scopes].sort(),
-    prefs.lookback,
-    prefs.extraFilter,
-  ]);
+  // Stored as a hash: the URL, scopes and filter in it need not be readable on disk.
+  const signature = createHash("sha256")
+    .update(
+      JSON.stringify([
+        CACHE_VERSION,
+        tenant.id,
+        tenant.tenantEndpoint,
+        credentialsFingerprint(tenant),
+        [...tenant.scopes].sort(),
+        prefs.lookback,
+        prefs.extraFilter,
+      ]),
+    )
+    .digest("hex");
   const signatureChanged = cache.get(PREFS_KEY) !== signature;
 
   // A fetch already running in this process is shared, never duplicated.

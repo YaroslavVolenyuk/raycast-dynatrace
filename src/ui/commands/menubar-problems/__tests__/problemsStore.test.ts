@@ -78,6 +78,16 @@ it("counts unreadable problems instead of hiding them", async () => {
   expect(await loadProblems(true)).toMatchObject({ state: "ok", total: 3, unreadable: 2 });
 });
 
+// THREAT_MODEL.md D1: besides the shown fields, only the environment URL and tenant name.
+it("keeps the filter, scopes and credentials hash out of the cache", async () => {
+  setPreferences({ extraFilter: 'matchesValue(affected_entity_names, "payments-*")' });
+  mockList.mockResolvedValueOnce(problems(1));
+  await loadProblems(true);
+  const cache = new raycast.Cache();
+  const stored = ["last-result", "prefs", "last-fetch"].map((k) => cache.get(`menubar-problems:${k}`)).join("\n");
+  expect(stored).not.toMatch(/payments|storage:|events:read/);
+});
+
 it("shows N+ only past the counting cap", async () => {
   mockList.mockResolvedValueOnce(problems(MAX_COUNTED + 1));
   const result = await loadProblems(true);
