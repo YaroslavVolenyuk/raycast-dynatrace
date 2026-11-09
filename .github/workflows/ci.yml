@@ -6,15 +6,20 @@ on:
     branches:
       - main
 
+# Actions are pinned to commit SHAs (a moved tag cannot change what runs);
+# Dependabot keeps the pins current. Jobs only read the repository.
+permissions:
+  contents: read
+
 jobs:
   quality:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22.x"
           cache: "npm"
@@ -33,6 +38,9 @@ jobs:
 
       - name: Test
         run: npm test -- --coverage
+
+      - name: Raycast lint (manifest, icons, metadata, ESLint, Prettier — as the Store checks)
+        run: npx ray lint
 
       - name: Build (Raycast CLI — the same gate the Store runs)
         run: npx ray build -e dist
@@ -53,20 +61,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Semgrep (project rules)
         run: pipx run --spec semgrep==1.183.0 semgrep scan --config .semgrep --error --metrics=off
 
   gitleaks:
     runs-on: ubuntu-latest
+    # The token only lists a pull request's commits; no PR comments, so no write access.
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
       - name: Scan for secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
