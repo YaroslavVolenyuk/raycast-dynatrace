@@ -60,6 +60,22 @@ describe("classifyProblemsError, fed by the SDK's own errors", () => {
     expect(oauth).toMatchObject({ kind: "config", summary: "Authentication failed — check credentials" });
   });
 
+  // Only a rejection by the SSO is about the credentials; an outage or a missing scope is not.
+  it.each([
+    [respond(503, "Service Unavailable"), { kind: "transient", summary: "Dynatrace SSO is not responding" }],
+    [
+      respond(400, '{"error":"invalid_scope"}'),
+      { kind: "config", summary: "OAuth client lacks a requested scope — check the tenant" },
+    ],
+  ])("classifies an SSO answer by its cause: %j", async (sso, expected) => {
+    expect(await classifyFailure(OAUTH_TENANT, sso)).toMatchObject(expected);
+  });
+
+  it("treats a silent SSO as transient", async () => {
+    const abort = Object.assign(new Error("aborted"), { name: "AbortError" });
+    expect(await classifyFailure(OAUTH_TENANT, abort)).toMatchObject({ kind: "transient" });
+  });
+
   it("points a query Grail rejects at the Extra DQL Filter", async () => {
     const r = await classifyFailure(TOKEN_TENANT, respond(400, { error: { code: 400, message: "Syntax error" } }));
     expect(r).toMatchObject({ kind: "config", summary: "Query rejected — check Extra DQL Filter in preferences" });

@@ -87,6 +87,8 @@ function describeOAuthBody(body: string): string | null {
 
 // ── Error class ───────────────────────────────────────────────────────────────
 
+const SSO_TIMEOUT_MESSAGE = "SSO endpoint is not responding (15s timeout)";
+
 export class OAuthError extends Error {
   /** The response body with any `client_secret=…` redacted; this is what reaches the UI. */
   public body: string;
@@ -153,7 +155,7 @@ export function credentialsFingerprint(tenant: TenantConfig): string {
 }
 
 /** POSTs the client-credentials grant to the tenant's SSO endpoint (15s timeout). */
-async function requestToken(tenant: TenantConfig): Promise<Response> {
+async function requestToken(tenant: TenantConfig): Promise<{ res: Response; body: string }> {
   const scopeString = tenant.scopes.join(" ");
   const params = new URLSearchParams({
     grant_type: "client_credentials",
@@ -165,7 +167,7 @@ async function requestToken(tenant: TenantConfig): Promise<Response> {
   const ssoTimeout = new AbortController();
   const ssoTimer = setTimeout(() => ssoTimeout.abort(), 15_000);
   try {
-    return await fetch(tenant.ssoEndpoint, {
+    const res = await fetch(tenant.ssoEndpoint, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: params.toString(),
@@ -174,10 +176,12 @@ async function requestToken(tenant: TenantConfig): Promise<Response> {
       // secret included, to whatever host the Location header names.
       redirect: "error",
     });
+    // The body is read under the same timeout: an SSO that sends the headers
+    // and then stalls would otherwise hold the request (and the menu bar) forever.
+    return { res, body: redactSecret(await res.text(), tenant.clientSecret) };
   } catch (fetchErr) {
-    clearTimeout(ssoTimer);
     if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
-      throw new OAuthError(0, "SSO endpoint is not responding (15s timeout)");
+      throw new OAuthError(0, SSO_TIMEOUT_MESSAGE);
     }
     if (isRedirectRefusal(fetchErr)) {
       throw new OAuthError(
@@ -207,9 +211,7 @@ export async function getAccessToken(tenant: TenantConfig): Promise<string> {
     return cached.access_token;
   }
 
-  const res = await requestToken(tenant);
-
-  const body = redactSecret(await res.text(), tenant.clientSecret);
+  const { res, body } = await requestToken(tenant);
 
   if (!res.ok) {
     throw new OAuthError(res.status, body);
@@ -267,8 +269,15 @@ function describeEndpointFailure(err: OAuthError, detail: string | null): string
   return `${reason}${ssoHint}`;
 }
 
+/** True when the SSO failed or went silent: retrying may help, the credentials may well be right. */
+export function isTransientOAuthFailure(err: OAuthError): boolean {
+  return err.statusCode >= 500 || err.body === SSO_TIMEOUT_MESSAGE;
+}
+
 /** The user-facing message for a failed token request. */
-function describeOAuthFailure(err: OAuthError): string {
+export function describeOAuthFailure(err: OAuthError): string {
+  // Status 0: no response at all (timeout, refused redirect); the body is our own explanation.
+  if (err.statusCode === 0) return err.body;
   const detail = describeOAuthBody(err.body);
   // Surface the SSO's own reason — distinguishes invalid_client (bad
   // ID/Secret) from invalid_scope (a scope the OAuth client isn't granted).

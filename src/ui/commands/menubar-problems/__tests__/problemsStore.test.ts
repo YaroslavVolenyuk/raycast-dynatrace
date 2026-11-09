@@ -29,8 +29,10 @@ const TENANT: TenantConfig = {
   scopes: ["storage:buckets:read", "storage:events:read"],
 };
 
-const problems = (n: number) =>
-  Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Problem ${i}` }) as ProblemEntry);
+const problems = (n: number, skipped = 0) => ({
+  entries: Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `Problem ${i}` }) as ProblemEntry),
+  skipped,
+});
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -60,7 +62,7 @@ it("writes only the fields the menu shows to the cache", async () => {
     affectedEntityNames: ["payment-db-01"],
     raw: { "event.id": "p1", affected_entity_ids: ["HOST-SECRET123"], "custom.attribute": "internal" },
   } as unknown as ProblemEntry;
-  mockList.mockResolvedValueOnce([full]);
+  mockList.mockResolvedValueOnce({ entries: [full], skipped: 0 });
   const result = await loadProblems(true);
   expect(result.state === "ok" && result.problems).toEqual([
     { id: "p1", name: "Out-of-memory kills", displayId: "P-1", category: "RESOURCE_CONTENTION" },
@@ -68,6 +70,12 @@ it("writes only the fields the menu shows to the cache", async () => {
   const stored = new raycast.Cache().get("menubar-problems:last-result") ?? "";
   expect(stored).toContain("Out-of-memory kills");
   expect(stored).not.toMatch(/HOST-SECRET123|custom\.attribute|payment-db-01|"raw"/);
+});
+
+// A problem Grail returned is open even when its record could not be read.
+it("counts unreadable problems instead of hiding them", async () => {
+  mockList.mockResolvedValueOnce(problems(1, 2));
+  expect(await loadProblems(true)).toMatchObject({ state: "ok", total: 3, unreadable: 2 });
 });
 
 it("shows N+ only past the counting cap", async () => {
@@ -111,8 +119,8 @@ it("has nothing to show without a tenant", async () => {
 });
 
 it("never reads a result stored by an older version (no total) as zero problems", () => {
-  const legacy = { problems: problems(7), hasMore: true };
+  const legacy = { problems: problems(7).entries, hasMore: true };
   expect(openProblemCount(legacy)).toBe(7);
   expect(problemCountLabel(legacy)).toBe(`${MAX_SHOWN}+`);
-  expect(problemCountLabel({ problems: problems(2), hasMore: false })).toBe("2");
+  expect(problemCountLabel({ problems: problems(2).entries, hasMore: false })).toBe("2");
 });

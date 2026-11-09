@@ -51,8 +51,10 @@ export type ProblemsResult =
       endpoint: string;
       /** The first MAX_SHOWN problems, newest first. */
       problems: MenuProblem[];
-      /** Open problems found, up to MAX_COUNTED. */
+      /** Open problems found, up to MAX_COUNTED; includes the unreadable ones. */
       total: number;
+      /** Problems Grail returned that could not be read: counted, but not listed. */
+      unreadable?: number;
       /** More than MAX_COUNTED problems are open. */
       hasMore: boolean;
       fetchedAt: number;
@@ -95,7 +97,7 @@ const LAST_RESULT_KEY = "menubar-problems:last-result";
 const LAST_FETCH_KEY = "menubar-problems:last-fetch";
 const PREFS_KEY = "menubar-problems:prefs";
 /** Bump when the parsing or shape of cached results changes: results cached by older code are then refetched. */
-const CACHE_VERSION = 7;
+const CACHE_VERSION = 8;
 const DEFAULT_INTERVAL_MINUTES = 30;
 
 /** The fetch currently running in this process, shared by every loadProblems() call. */
@@ -119,19 +121,21 @@ async function fetchResult(tenant: TenantConfig, prefs: Preferences): Promise<Pr
   if (scopeError) return { state: "error", endpoint, error: classifyProblemsError(scopeError) };
   try {
     // One extra record tells us whether to show "N+".
-    const all = await listProblems(liveTransport, tenant, {
+    const { entries, skipped } = await listProblems(liveTransport, tenant, {
       limit: MAX_COUNTED + 1,
       lookback: prefs.lookback || "7d",
       extraFilter: prefs.extraFilter,
     });
+    const found = entries.length + skipped;
     return {
       state: "ok",
       endpoint,
       tenantName: tenant.name,
       extraFilter: prefs.extraFilter?.trim() || undefined,
-      problems: all.slice(0, MAX_SHOWN).map(toMenuProblem),
-      total: Math.min(all.length, MAX_COUNTED),
-      hasMore: all.length > MAX_COUNTED,
+      problems: entries.slice(0, MAX_SHOWN).map(toMenuProblem),
+      total: Math.min(found, MAX_COUNTED),
+      hasMore: found > MAX_COUNTED,
+      ...(skipped > 0 && { unreadable: skipped }),
       fetchedAt: Date.now(),
     };
   } catch (err) {

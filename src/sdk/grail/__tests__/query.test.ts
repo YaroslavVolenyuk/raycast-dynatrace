@@ -386,7 +386,7 @@ describe("auth errors from getAccessToken", () => {
   it("wraps OAuthError in a user-friendly message", async () => {
     mockGetAccessToken.mockRejectedValueOnce(new OAuthError(401, "invalid_client"));
 
-    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("OAuth error: check client_id / client_secret");
+    await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow(/^OAuth error: invalid_client/);
   });
 
   it("re-throws non-OAuth errors as-is", async () => {

@@ -30,6 +30,15 @@ function rejectedTokenMessage(tenant: TenantConfig): string {
     : "The environment rejected the token — the OAuth client belongs to another account, or the SSO endpoint does not match this environment";
 }
 
+/** True for a query:verify response body: JSON with a boolean `valid`. */
+function isVerifyAnswer(body: string): boolean {
+  try {
+    return typeof (JSON.parse(body) as { valid?: unknown } | null)?.valid === "boolean";
+  } catch {
+    return false;
+  }
+}
+
 export async function testTenantConnection(tenant: TenantConfig): Promise<ConnectionTestResult> {
   const credentials = await validateTenantCredentials(tenant);
   if (!credentials.valid) return credentials;
@@ -59,14 +68,18 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
   }
   // 403 = reachable and token accepted, but refused (missing scope, no IAM
   // permission, token from another environment). Reported as such, not as success.
-  const looksLikePlatform = !body.trimStart().startsWith("<") && response.status !== 404;
-  if (!looksLikePlatform) {
-    return {
-      valid: false,
-      error: `This does not look like a Dynatrace platform environment (HTTP ${response.status}). Expected https://<environment-id>.apps.dynatrace.com`,
-    };
+  if (response.status === 403 && !body.trimStart().startsWith("<")) {
+    const detail = parseErrorBody(body)?.message;
+    return detail ? { valid: true, accessDenied: true, detail } : { valid: true, accessDenied: true };
   }
-  if (response.status !== 403) return { valid: true };
-  const detail = parseErrorBody(body)?.message;
-  return detail ? { valid: true, accessDenied: true, detail } : { valid: true, accessDenied: true };
+  // Only the answer query:verify gives counts: any other server, or a failing
+  // one, must not pass as a verified connection.
+  if (response.ok && isVerifyAnswer(body)) return { valid: true };
+  if (response.status >= 500 || response.status === 429) {
+    return { valid: false, error: `The environment answered HTTP ${response.status} — try again in a moment` };
+  }
+  return {
+    valid: false,
+    error: `This does not look like a Dynatrace platform environment (HTTP ${response.status}). Expected https://<environment-id>.apps.dynatrace.com`,
+  };
 }

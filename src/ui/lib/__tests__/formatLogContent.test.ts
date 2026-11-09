@@ -12,6 +12,15 @@ describe("formatLogContent", () => {
     expect(out).toContain('"a": 1');
   });
 
+  it("keeps every number exactly as the log wrote it", () => {
+    const out = formatLogContent('{"orderId":9007199254740993,"big":1e400,"amount":1.10,"n":[-0,2E3]}')!;
+    expect(out).toContain('"orderId": 9007199254740993');
+    expect(out).toContain('"big": 1e400');
+    expect(out).toContain('"amount": 1.10');
+    expect(out).toContain("-0,");
+    expect(out).toContain("2E3");
+  });
+
   it("fences plain text to block markdown injection", () => {
     const out = formatLogContent("![x](http://evil/beacon)")!;
     expect(out.startsWith("```")).toBe(true);

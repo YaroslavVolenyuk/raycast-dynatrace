@@ -20,6 +20,13 @@ interface ProblemsErrorRule {
 
 // Checked in order; the first match wins.
 const AFTER_SCOPE_RULES: ProblemsErrorRule[] = [
+  // An SSO outage is no reason to edit the tenant.
+  { pattern: /^SSO is not available/, kind: "transient", summary: "Dynatrace SSO is not responding" },
+  {
+    pattern: /invalid_scope/,
+    kind: "config",
+    summary: "OAuth client lacks a requested scope — check the tenant",
+  },
   {
     pattern: /oauth error|authentication failed|client_id|client_secret/i,
     kind: "config",

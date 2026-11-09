@@ -8,6 +8,7 @@
 import { z } from "zod";
 import type { TenantConfig } from "../auth";
 import type { DynatraceTransport } from "../transport";
+import { normalizeRecords, type ResourcePage } from "./page";
 
 // ── 1. Raw API record schema ──────────────────────────────────────────────────
 // provenance: live Grail record 2026-10-25. `dt.davis.problems` holds one record
@@ -116,11 +117,15 @@ export function buildProblemsQuery(opts: ListProblemsOptions = {}): string {
 
 // ── 4. Resource call ──────────────────────────────────────────────────────────
 
+/**
+ * Records that fail schema validation are left out and counted in `skipped`:
+ * each one is still an open problem, so it must count, never vanish.
+ */
 export async function listProblems(
   transport: DynatraceTransport,
   tenant: TenantConfig,
   opts: ListProblemsOptions = {},
-): Promise<ProblemEntry[]> {
+): Promise<ResourcePage<ProblemEntry>> {
   const records = await transport.executeDql<unknown>(tenant, buildProblemsQuery(opts), {
     signal: opts.signal,
     maxResultRecords: opts.limit ?? PROBLEM_PAGE_SIZE,
@@ -128,16 +133,12 @@ export async function listProblems(
     timeoutMs: 15_000,
   });
 
-  const entries: ProblemEntry[] = [];
-  let firstIssue: string | undefined;
-  for (const record of records) {
-    const parsed = problemRecordSchema.safeParse(record);
-    if (parsed.success) entries.push(normalizeProblem(parsed.data));
-    else firstIssue ??= parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
-  }
+  const page = normalizeRecords(records, problemRecordSchema, normalizeProblem);
   // Problems exist but none could be read: that must surface as an error, never as "no problems".
-  if (records.length > 0 && entries.length === 0) {
-    throw new Error(`Unexpected problem record format (${firstIssue ?? "unknown"})`);
+  if (records.length > 0 && page.entries.length === 0) {
+    const issues = problemRecordSchema.safeParse(records[0]).error?.issues ?? [];
+    const reason = issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") || "unknown";
+    throw new Error(`Unexpected problem record format (${reason})`);
   }
-  return entries;
+  return page;
 }

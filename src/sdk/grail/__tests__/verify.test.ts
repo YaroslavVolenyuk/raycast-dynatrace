@@ -63,6 +63,30 @@ it("passes when the environment verifies the query", async () => {
   expect(mockFetch.mock.calls[0][0]).toContain("/platform/storage/query/v1/query:verify");
 });
 
+// The point of the test: a typo'd or foreign host must not pass as verified.
+it.each([
+  [200, '{"hello":"world"}'],
+  [200, ""],
+  [405, "Method Not Allowed"],
+])("fails on HTTP %i %j, which is not a query:verify answer", async (status, body) => {
+  mockFetch.mockResolvedValueOnce(respond(status, body));
+  const r = await testTenantConnection(TENANT);
+  expect(r.valid === false && r.error).toMatch(/does not look like a Dynatrace platform environment/);
+});
+
+it.each([500, 503, 429])("reports HTTP %i as a failing environment, not as verified", async (status) => {
+  mockFetch.mockResolvedValueOnce(respond(status, '{"error":"internal"}'));
+  expect(await testTenantConnection(TENANT)).toEqual({
+    valid: false,
+    error: `The environment answered HTTP ${status} — try again in a moment`,
+  });
+});
+
+it("passes when the environment finds the test query invalid: it still answered", async () => {
+  mockFetch.mockResolvedValueOnce(respond(200, '{"valid":false,"notifications":[]}'));
+  expect(await testTenantConnection(TENANT)).toEqual({ valid: true });
+});
+
 it("reports a 403 as reachable but access denied, not as a plain success", async () => {
   mockFetch.mockResolvedValueOnce(respond(403, '{"error":{"code":403}}'));
   expect(await testTenantConnection(TENANT)).toEqual({ valid: true, accessDenied: true });

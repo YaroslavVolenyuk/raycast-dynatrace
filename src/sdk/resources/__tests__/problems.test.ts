@@ -40,11 +40,12 @@ describe("buildProblemsQuery", () => {
 });
 
 describe("listProblems", () => {
-  it("skips invalid records and passes required scopes", async () => {
+  it("counts invalid records instead of dropping them, and passes required scopes", async () => {
     const executeDql = jest.fn().mockResolvedValue([...fixture.records, { bogus: true }]);
     const transport = { executeDql } as unknown as DynatraceTransport;
     const out = await listProblems(transport, TENANT);
-    expect(out).toHaveLength(2);
+    expect(out.entries).toHaveLength(2);
+    expect(out.skipped).toBe(1);
     expect(executeDql.mock.calls[0][2].requiredScopes).toContain("storage:events:read");
   });
 });
@@ -81,9 +82,9 @@ describe("records with null fields", () => {
 
   it("keeps a problem whose optional fields are null", async () => {
     const executeDql = jest.fn().mockResolvedValue([custom]);
-    const out = await listProblems({ executeDql } as unknown as DynatraceTransport, TENANT);
-    expect(out).toHaveLength(1);
-    expect(out[0].affectedEntityNames).toEqual([]);
+    const { entries } = await listProblems({ executeDql } as unknown as DynatraceTransport, TENANT);
+    expect(entries).toHaveLength(1);
+    expect(entries[0].affectedEntityNames).toEqual([]);
   });
 
   it("throws instead of reporting no problems when no record can be read", async () => {
@@ -126,7 +127,7 @@ describe("live record shape", () => {
 
   it("parses it as an open problem", async () => {
     const executeDql = jest.fn().mockResolvedValue([live]);
-    const [p] = await listProblems({ executeDql } as unknown as DynatraceTransport, TENANT);
+    const [p] = (await listProblems({ executeDql } as unknown as DynatraceTransport, TENANT)).entries;
     expect(p).toMatchObject({ displayId: "P-2610257", isOpen: true, category: "CUSTOM_ALERT" });
   });
 });

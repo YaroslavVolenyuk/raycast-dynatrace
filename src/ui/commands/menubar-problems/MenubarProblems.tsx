@@ -142,6 +142,7 @@ export default function MenubarProblems() {
           {notShown > 0 && (
             <MenuBarExtra.Item
               title={`${notShownLabel} more in Dynatrace`}
+              subtitle={data.unreadable ? `${data.unreadable} could not be read` : undefined}
               icon={Icon.Ellipsis}
               onAction={() => open(problemsAppUrl)}
             />

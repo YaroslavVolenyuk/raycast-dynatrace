@@ -1,6 +1,13 @@
 // Token and error-body handling shared by the Grail query clients (query.ts, assist.ts).
 
-import { getAccessToken, OAuthError, redactSecret, type TenantConfig } from "../auth";
+import {
+  describeOAuthFailure,
+  getAccessToken,
+  isTransientOAuthFailure,
+  OAuthError,
+  redactSecret,
+  type TenantConfig,
+} from "../auth";
 import { isNetworkError, ssoNetworkError } from "./network";
 
 /** Gets an access token, mapping OAuth and SSO network failures to user-facing errors. */
@@ -9,7 +16,9 @@ export async function acquireAccessToken(tenant: TenantConfig): Promise<string> 
     return await getAccessToken(tenant);
   } catch (authErr) {
     if (authErr instanceof OAuthError) {
-      throw new Error(`OAuth error: check client_id / client_secret in Manage Tenants (${authErr.statusCode})`);
+      // The SSO's own reason: invalid_client, invalid_scope and an outage need different fixes.
+      const reason = describeOAuthFailure(authErr);
+      throw new Error(isTransientOAuthFailure(authErr) ? `SSO is not available — ${reason}` : `OAuth error: ${reason}`);
     }
     if (isNetworkError(authErr)) throw ssoNetworkError(authErr, tenant.ssoEndpoint);
     throw authErr;

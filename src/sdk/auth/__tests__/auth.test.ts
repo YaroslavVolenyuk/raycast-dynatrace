@@ -160,6 +160,26 @@ test("the token request never follows a redirect", async () => {
   expect(mockFetch.mock.calls[0][1]).toMatchObject({ redirect: "error" });
 });
 
+// Real fetch rejects a pending body read with AbortError when its signal aborts.
+test("the SSO timeout also covers a body that stalls after the headers", async () => {
+  jest.useFakeTimers();
+  mockFetch.mockImplementationOnce(async (_url: string, init: RequestInit) => ({
+    ok: true,
+    status: 200,
+    text: () =>
+      new Promise((_resolve, reject) =>
+        init.signal?.addEventListener("abort", () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" })),
+        ),
+      ),
+  }));
+  const { getAccessToken, OAuthError } = await loadAuth();
+  const result = getAccessToken(TENANT).catch((e: unknown) => e);
+  await jest.advanceTimersByTimeAsync(15_000);
+  expect(await result).toBeInstanceOf(OAuthError);
+  jest.useRealTimers();
+});
+
 test("validateTenantCredentials explains a refused SSO redirect", async () => {
   mockFetch.mockRejectedValueOnce(
     Object.assign(new TypeError("fetch failed"), { cause: new Error("unexpected redirect") }),
