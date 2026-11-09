@@ -5,7 +5,7 @@
 import { ZodError } from "zod";
 import { credentialsKind, getAccessToken, invalidateTokenCache, TenantConfig } from "../auth";
 import { grailResponseSchema, type GrailNotification } from "./schema";
-import { acquireAccessToken, parseErrorBody } from "./http";
+import { acquireAccessToken, parseErrorBody, readBody } from "./http";
 import { environmentNetworkError, isNetworkError } from "./network";
 
 export interface GrailQueryOptions {
@@ -101,7 +101,7 @@ async function postExecute(
       body: JSON.stringify(payload),
       signal: timeout.signal,
     });
-    return { response, rawText: await response.text() };
+    return { response, rawText: await readBody(response, accessToken) };
   } catch (fetchErr) {
     if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
       // Distinguish timeout abort from user/unmount abort
@@ -323,7 +323,7 @@ async function pollGrailQuery(
       headers: { Authorization: `Bearer ${accessToken}` },
       signal: timeout.signal,
     });
-    rawText = await response.text();
+    rawText = await readBody(response, accessToken);
   } catch (fetchErr) {
     if (fetchErr instanceof Error && fetchErr.name === "AbortError" && timeout.timedOut()) {
       throw notRespondingError(timeout);

@@ -4,7 +4,7 @@
 // `query:verify` (parses a DQL query without running it: free, no data read).
 
 import { getAccessToken, validateTenantCredentials, type TenantConfig } from "../auth";
-import { parseErrorBody } from "./http";
+import { parseErrorBody, readBody } from "./http";
 import { environmentNetworkError, isNetworkError } from "./network";
 
 export type ConnectionTestResult =
@@ -47,7 +47,7 @@ export async function testTenantConnection(tenant: TenantConfig): Promise<Connec
       body: JSON.stringify({ query: "fetch logs | limit 1" }),
       signal: timeoutCtrl.signal,
     });
-    body = await response.text();
+    body = await readBody(response, accessToken);
   } catch (err) {
     return connectionFailure(err, endpoint);
   } finally {

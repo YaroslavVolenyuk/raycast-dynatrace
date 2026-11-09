@@ -11,7 +11,7 @@
 
 import { z } from "zod";
 import { invalidateTokenCache, type TenantConfig } from "../auth";
-import { acquireAccessToken, parseErrorBody } from "./http";
+import { acquireAccessToken, parseErrorBody, readBody } from "./http";
 import { environmentNetworkError, isNetworkError } from "./network";
 
 const TIMEOUT_MS = 10_000;
@@ -117,7 +117,7 @@ async function postWithTimeout(
       body: JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
     });
-    return { response, rawText: await response.text() };
+    return { response, rawText: await readBody(response, accessToken) };
   } catch (fetchErr) {
     if (timeoutSignal.aborted) throw new Error(`Dynatrace is not responding (${TIMEOUT_MS / 1000}s timeout)`);
     if (isNetworkError(fetchErr)) throw environmentNetworkError(fetchErr, endpoint);

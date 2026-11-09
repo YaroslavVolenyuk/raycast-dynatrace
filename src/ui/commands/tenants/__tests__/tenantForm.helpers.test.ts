@@ -128,6 +128,15 @@ describe("environment URL as pasted by users", () => {
   it("accepts a non-Dynatrace host (proxies, Managed) unchanged", () => {
     expect(validateForm(validValues({ tenantEndpoint: "https://dt.example.com" })).tenantEndpoint).toBeUndefined();
   });
+
+  // API paths are appended to the URL; after ? or # they would end up in the query string.
+  it.each([
+    "https://proxy.example.com/base?x=1",
+    "https://proxy.example.com/base#frag",
+    "https://u:p@proxy.example.com",
+  ])("rejects a proxy URL with a query, fragment or credentials: %s", (tenantEndpoint) => {
+    expect(validateForm(validValues({ tenantEndpoint })).tenantEndpoint).toMatch(/^Remove the/);
+  });
 });
 
 describe("platform-token tenants in the form", () => {

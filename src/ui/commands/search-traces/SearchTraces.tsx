@@ -13,7 +13,7 @@ import { useActiveTenant, useTenantQuery } from "../../hooks";
 import { emptyDescription } from "../../lib/scopeHint";
 import { parseTimeframe } from "../../lib/parseTimeframe";
 import { severityIcon, severityOf } from "../../lib/svg";
-import { pickTimeframe, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
+import { pickTimeframe, stringArg, timeframeTitle, type TimeframeValue } from "../../lib/listArgs";
 import { listSectionSubtitle, listSectionTitle } from "../../lib/sectionTitle";
 import TenantActions from "../../components/TenantActions";
 import { tenantQueryFallback } from "../../components/TenantQueryFallback";
@@ -83,7 +83,7 @@ export default function SearchTraces(props: {
     () => props.initialTimeframe ?? pickTimeframe(timeframeArg),
   );
   // initialTraceId takes priority (log → trace navigation); fall back to argument
-  const initialTraceId = props.initialTraceId ?? traceIdArg;
+  const initialTraceId = props.initialTraceId ?? stringArg(traceIdArg);
 
   const { push } = useNavigation();
   const [search, setSearch] = useState("");

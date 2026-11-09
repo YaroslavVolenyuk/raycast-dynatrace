@@ -183,6 +183,18 @@ describe("HTTP error responses", () => {
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 500: Internal Server Error");
   });
 
+  // A proxy or debug page that echoes the request headers must not put the token
+  // into error text: it is shown, copied and cached on disk (THREAT_MODEL.md C4).
+  it.each([
+    ["a JSON error body", { error: { code: 500, message: "debug: Bearer access-token" } }],
+    ["a plain-text body", "request headers: authorization=Bearer access-token"],
+  ])("keeps a token echoed in %s out of the error", async (_name, body) => {
+    mockFetch.mockResolvedValueOnce(grailError(500, body));
+    const err = await executeDqlQuery(TENANT, "fetch logs").catch((e: Error) => e);
+    expect(String(err)).not.toContain("access-token");
+    expect(String(err)).toContain("[REDACTED]");
+  });
+
   it("detects HTML body on non-ok and suggests checking the endpoint URL", async () => {
     mockFetch.mockResolvedValueOnce(grailError(502, "<html><body>Bad Gateway</body></html>"));
 
@@ -283,6 +295,12 @@ describe("long-running query polling", () => {
       .mockResolvedValueOnce({ ok: false, status: 410, text: async () => "gone" });
 
     await expect(executeDqlQuery(TENANT, "fetch logs")).rejects.toThrow("HTTP 410 while polling");
+  });
+
+  it("keeps a token echoed by a poll error out of the error", async () => {
+    mockFetch.mockResolvedValueOnce(grailRunning("tok")).mockResolvedValueOnce(grailError(502, "Bearer access-token"));
+    const err = await executeDqlQuery(TENANT, "fetch logs").catch((e: Error) => e);
+    expect(String(err)).toMatch(/HTTP 502 while polling.*\[REDACTED\]/);
   });
 
   /** Lets the fire-and-forget cancel request reach fetch. */

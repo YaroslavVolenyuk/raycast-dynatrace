@@ -108,7 +108,7 @@ export class OAuthError extends Error {
  * it appears (JSON error_description, decoded echoes, …). OAuthError only knows
  * the `client_secret=` pattern; this catches the value without its key.
  */
-function redactSecret(text: string, secret: string): string {
+export function redactSecret(text: string, secret: string): string {
   if (!secret) return text;
   const forms = new Set([secret, encodeURIComponent(secret), new URLSearchParams({ s: secret }).toString().slice(2)]);
   let out = text;

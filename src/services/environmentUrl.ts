@@ -64,5 +64,10 @@ export function environmentUrlProblem(url: string): string | undefined {
   if (!isHttpsUrl(url)) return "Must be a valid https:// URL";
   const platformUrl = platformUrlForClassic(url);
   if (platformUrl) return `Use the platform URL: ${platformUrl}`;
+  // API paths are appended to the URL: after a ? or # they would land in the
+  // query or fragment. Credentials in a URL make fetch refuse the request.
+  const { username, password } = new URL(url);
+  if (username || password) return "Remove the user name and password from the URL";
+  if (/[?#]/.test(url)) return "Remove the query (?…) and fragment (#…) from the URL";
   return undefined;
 }

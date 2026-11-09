@@ -37,10 +37,16 @@ if (!TENANT || !CLIENT_ID || !CLIENT_SECRET) {
   process.exit(1);
 }
 
+/** Cuts the secrets out of a response that is printed: a proxy or SSO error page may echo the request. */
+const secrets = [CLIENT_SECRET, encodeURIComponent(CLIENT_SECRET)];
+const redact = (text) => secrets.reduce((out, s) => (s ? out.split(s).join("[REDACTED]") : out), text);
+
 // ── 1. Token ──────────────────────────────────────────────────────────────────
 
 const tokenRes = await fetch(SSO, {
   method: "POST",
+  // a 307/308 would re-send the body, client secret included, to the Location host
+  redirect: "error",
   headers: { "Content-Type": "application/x-www-form-urlencoded" },
   body: new URLSearchParams({
     grant_type: "client_credentials",
@@ -51,10 +57,11 @@ const tokenRes = await fetch(SSO, {
 });
 const tokenBody = await tokenRes.text();
 if (!tokenRes.ok) {
-  console.error(`✗ SSO ${tokenRes.status}: ${tokenBody.slice(0, 300)}`);
+  console.error(`✗ SSO ${tokenRes.status}: ${redact(tokenBody).slice(0, 300)}`);
   process.exit(1);
 }
 const token = JSON.parse(tokenBody);
+secrets.push(token.access_token);
 const granted = (token.scope ?? "").split(/\s+/).filter(Boolean);
 console.log("✓ token issued");
 console.log(`  requested: ${SCOPES.join(" ")}`);
@@ -67,6 +74,7 @@ if (notGranted.length) console.log(`  ✗ NOT granted: ${notGranted.join(" ")}  
 const auth = { Authorization: `Bearer ${token.access_token}` };
 let res = await fetch(`${TENANT}/platform/storage/query/v1/query:execute`, {
   method: "POST",
+  redirect: "error",
   headers: { ...auth, "Content-Type": "application/json" },
   body: JSON.stringify({ query: QUERY, requestTimeoutMilliseconds: 5000, maxResultRecords: LIMIT }),
 });
@@ -74,14 +82,14 @@ let body = await res.json().catch(() => null);
 while (res.ok && body?.state && !["SUCCEEDED", "FAILED"].includes(body.state) && body.requestToken) {
   res = await fetch(
     `${TENANT}/platform/storage/query/v1/query:poll?request-token=${encodeURIComponent(body.requestToken)}&request-timeout-milliseconds=5000`,
-    { headers: auth },
+    { headers: auth, redirect: "error" },
   );
   body = await res.json().catch(() => null);
 }
 
 console.log(`\nquery: ${QUERY}`);
 if (!res.ok || body?.error) {
-  console.error(`✗ HTTP ${res.status}: ${JSON.stringify(body?.error ?? body).slice(0, 500)}`);
+  console.error(`✗ HTTP ${res.status}: ${redact(JSON.stringify(body?.error ?? body)).slice(0, 500)}`);
   process.exit(1);
 }
 const records = body?.result?.records ?? [];

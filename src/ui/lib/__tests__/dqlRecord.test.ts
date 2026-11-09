@@ -56,6 +56,11 @@ describe("toCsv", () => {
     expect(csv.split("\n")[1]).toBe(`"'=HYPERLINK(""http://x"")",'+1,'@SUM(A1),'-cmd,'\tx`);
   });
 
+  // Excel with a decimal-comma locale (ru, uk, de) splits on ";".
+  it("quotes a cell with ; so it cannot split into a formula cell", () => {
+    expect(toCsv([{ a: "x;=1+cmd|' /C calc'!A0;y" }], ["a"]).split("\n")[1]).toBe(`"x;=1+cmd|' /C calc'!A0;y"`);
+  });
+
   it("keeps numbers and ordinary text as they are", () => {
     expect(toCsv([{ n: -1, s: "a=b", t: "1-2" }], ["n", "s", "t"]).split("\n")[1]).toBe("-1,a=b,1-2");
   });

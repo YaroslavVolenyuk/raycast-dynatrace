@@ -45,3 +45,8 @@ export function pickLimit(arg: string | undefined, max: number): number | undefi
   const n = Number(arg);
   return n > 0 ? Math.min(n, max) : undefined;
 }
+
+/** The value when it is text. Deeplink JSON may carry any type where the manifest promises a string. */
+export function stringArg(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}

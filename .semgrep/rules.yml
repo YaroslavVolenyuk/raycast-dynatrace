@@ -14,19 +14,38 @@ rules:
   # C2 — on a 307/308 fetch re-sends the body (client secret included) to the
   # Location host. Every request in the auth layer must refuse redirects.
   - id: secret-request-follows-redirects
-    languages: [typescript]
+    languages: [typescript, javascript]
     severity: ERROR
     message: >-
       fetch() in the auth layer must set `redirect: "error"`: a 307/308 would
       re-send the body, client secret included, to another host (THREAT_MODEL.md C2).
     paths:
-      include: ["/src/sdk/auth/"]
+      # the auth layer, and the debug script that asks the SSO with a real secret
+      include: ["/src/sdk/auth/", "/scripts/check-problems.mjs"]
       exclude: ["__tests__/"]
     pattern-either:
       - pattern: fetch($URL)
       - patterns:
           - pattern: fetch($URL, {...})
           - pattern-not: 'fetch($URL, {..., redirect: "error", ...})'
+
+  # C4 — a proxy or debug page may echo the request headers, and an environment
+  # response body becomes error text: shown, copied, cached on disk by the menu
+  # bar. Every body read in the query layer goes through readBody(), which cuts
+  # the bearer token out.
+  - id: environment-body-read-unredacted
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      Read environment response bodies with readBody(response, accessToken): an
+      echoed bearer token would reach error text (THREAT_MODEL.md C4).
+    paths:
+      include: ["/src/sdk/grail/"]
+      exclude: ["__tests__/"]
+    patterns:
+      - pattern: $RES.text()
+      - pattern-not-inside: |
+          async function readBody(...) { ... }
 
   # R1/R2 — an image or link URL in Detail markdown makes Raycast load it with
   # no click. Only the base64 data URIs from svgDataUri() may go there.

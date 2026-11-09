@@ -1,4 +1,4 @@
-import { pickTimeframe, pickLevel, pickLimit, timeframeTitle } from "../listArgs";
+import { pickTimeframe, pickLevel, pickLimit, timeframeTitle, stringArg } from "../listArgs";
 
 describe("pickTimeframe", () => {
   it("accepts manifest values", () => {
@@ -36,4 +36,14 @@ describe("pickLimit", () => {
     expect(pickLimit("10; drop", 1000)).toBeUndefined();
     expect(pickLimit(undefined, 1000)).toBeUndefined();
   });
+});
+
+// A deeplink can put any JSON type where the manifest promises text (Run DQL called dql.trim() on it).
+it("stringArg passes text through and drops other types", () => {
+  expect([stringArg("fetch logs"), stringArg(123), stringArg({ dql: "x" }), stringArg(undefined)]).toEqual([
+    "fetch logs",
+    undefined,
+    undefined,
+    undefined,
+  ]);
 });

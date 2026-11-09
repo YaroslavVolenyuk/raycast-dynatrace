@@ -1,4 +1,4 @@
-import { Form, ActionPanel, Action, Icon, useNavigation } from "@raycast/api";
+import { Form, ActionPanel, Action, Icon, useNavigation, Keyboard } from "@raycast/api";
 import type { LaunchProps } from "@raycast/api";
 import { useEffect, useState } from "react";
 import { getLastDqlQuery, getLastDqlTimeframe, setLastDqlQuery, setLastDqlTimeframe } from "../../../services";
@@ -10,6 +10,7 @@ import SuggestList from "./SuggestList";
 import TemplateList from "./TemplateList";
 import { useDqlVerification } from "./useDqlVerification";
 import { DEFAULT_TIMEFRAME, TIMEFRAME_PRESETS } from "./timeframes";
+import { stringArg } from "../../lib/listArgs";
 
 interface RunDqlLaunchContext {
   /** Query to open the form with, e.g. from another command or a quicklink. */
@@ -31,7 +32,7 @@ interface FormValues {
 export default function RunDql(
   props: Partial<LaunchProps<{ launchContext: RunDqlLaunchContext }>> & { initialQuery?: string },
 ) {
-  const presetQuery = props.initialQuery ?? props.launchContext?.dql;
+  const presetQuery = props.initialQuery ?? stringArg(props.launchContext?.dql);
 
   const { push } = useNavigation();
   const { tenant, tenants, isLoading: tenantLoading, error: tenantError, reload: reloadTenants } = useActiveTenant();
@@ -131,7 +132,7 @@ export default function RunDql(
             <Action
               title="Suggest Next…"
               icon={Icon.LightBulb}
-              shortcut={{ modifiers: ["cmd"], key: "." }}
+              shortcut={Keyboard.Shortcut.Common.Pin}
               onAction={() => push(<SuggestList tenant={selectedTenant} query={dql} onChange={setDql} />)}
             />
           )}
