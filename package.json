@@ -284,7 +284,7 @@
     "node": ">=22.22.2"
   },
   "dependencies": {
-    "@raycast/api": "^2.11.1",
+    "@raycast/api": "^2.13.0",
     "@raycast/utils": "^2.3.3",
     "zod": "4.6.7"
   },
